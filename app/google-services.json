@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "363277996898",
+    "project_id": "fitnutrition-aaee1",
+    "storage_bucket": "fitnutrition-aaee1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:363277996898:android:a64dff006ecf8070c3123b",
+        "android_client_info": {
+          "package_name": "sheridan.dheripu.fitnutrition"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyARE3iLIdp4ZrPlUYzCNQ9CwQ4hC7tj3gk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -40,15 +41,18 @@ android {
         compose = true
     }
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.0" // Use the version compatible with your Kotlin plugin
+        kotlinCompilerExtensionVersion = "1.5.0"
     }
 }
 
 dependencies {
 
-    val composeBom = platform("androidx.compose:compose-bom:2024.03.00") // Check for the latest version
-    implementation(composeBom)
-    androidTestImplementation(composeBom)
+//    val composeBom = platform("androidx.compose:compose-bom:2024.03.00")
+//    implementation(composeBom)
+//    androidTestImplementation(composeBom)
+
+    implementation(platform("androidx.compose:compose-bom:2024.03.00"))
+
 
     // Compose Dependencies
     implementation("androidx.compose.material3:material3")
@@ -57,6 +61,11 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     implementation("androidx.activity:activity-compose:1.11.0")
     implementation("androidx.compose.material:material-icons-extended:1.6.7")
+
+    implementation(platform("com.google.firebase:firebase-bom:34.5.0"))
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-firestore")
+
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)

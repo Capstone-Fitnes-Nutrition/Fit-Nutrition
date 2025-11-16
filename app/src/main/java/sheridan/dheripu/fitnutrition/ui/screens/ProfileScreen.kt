@@ -1,52 +1,82 @@
 package sheridan.dheripu.fitnutrition.ui.screens
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material3.Card
-import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import sheridan.dheripu.fitnutrition.ui.components.InfoCard
+import sheridan.dheripu.fitnutrition.AuthManager
 import sheridan.dheripu.fitnutrition.ui.components.ScreenHeader
 
 @Composable
-fun ProfileScreen(padding: Modifier) {
+fun ProfileScreen(
+    onLogout: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val currentUser = AuthManager.currentUser
+
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
         ScreenHeader(
             title = "Profile",
-            subtitle = "Your account and settings"
+            subtitle = "Your account information"
         )
 
         // User Info Card
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 16.dp)
+                .padding(vertical = 16.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp)
+            ) {
+                Text(
+                    text = currentUser?.displayName ?: "User",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = currentUser?.email ?: "Not signed in",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+
+                // add more user info here later from Firestore
+                Text(
+                    text = "User ID: ${currentUser?.uid?.take(8)}...",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+        }
+
+        // App Info
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp)
         ) {
             Column(
                 modifier = Modifier.padding(16.dp)
             ) {
                 Text(
-                    text = "John Doe",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
+                    text = "FitNutrition App",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    text = "Health Enthusiast",
+                    text = "Your personal health and fitness companion",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     modifier = Modifier.padding(top = 4.dp)
@@ -54,65 +84,29 @@ fun ProfileScreen(padding: Modifier) {
             }
         }
 
-        // User Stats
-        Text(
-            text = "Your Stats",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(vertical = 8.dp)
-        )
+        Spacer(modifier = Modifier.weight(1f))
 
-        Row(modifier = Modifier.fillMaxWidth()) {
-            InfoCard(
-                title = "Weight",
-                value = "75",
-                unit = "kg",
-                modifier = Modifier.weight(1f)
+        // Logout Button
+        Button(
+            onClick = {
+                AuthManager.logout()
+                onLogout()
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.errorContainer,
+                contentColor = MaterialTheme.colorScheme.onErrorContainer
             )
-            InfoCard(
-                title = "Height",
-                value = "178",
-                unit = "cm",
-                modifier = Modifier.weight(1f)
+        ) {
+            Icon(
+                Icons.Default.ExitToApp,
+                contentDescription = "Logout",
+                modifier = Modifier.size(20.dp)
             )
-        }
-
-        InfoCard(title = "Goal", value = "Weight Loss")
-        InfoCard(title = "Weekly Target", value = "5", unit = "workouts")
-
-        // Settings Section
-        Text(
-            text = "Settings",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(vertical = 16.dp)
-        )
-
-        val settings = listOf(
-            "Dietary Preferences",
-            "Fitness Goals",
-            "Notification Settings",
-            "Privacy & Security",
-            "Connect Devices"
-        )
-
-        settings.forEach { setting ->
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp)
-            ) {
-                ListItem(
-                    headlineContent = { Text(setting) },
-                    leadingContent = {
-                        Icon(
-                            Icons.Default.Favorite,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                )
-            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Sign Out")
         }
     }
 }
