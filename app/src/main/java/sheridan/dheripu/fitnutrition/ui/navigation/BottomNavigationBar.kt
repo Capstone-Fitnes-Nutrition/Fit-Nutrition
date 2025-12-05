@@ -23,7 +23,7 @@ fun BottomNavigationBar(
         NavigationItem.Home,
         NavigationItem.Nutrition,
         NavigationItem.Fitness,
-        NavigationItem.Wearable,
+        NavigationItem.Health ,
         NavigationItem.Profile ,
     )
 
@@ -37,7 +37,7 @@ fun BottomNavigationBar(
                             NavigationItem.Home -> Icons.Filled.Home
                             NavigationItem.Nutrition -> Icons.Filled.LocalDining
                             NavigationItem.Fitness -> Icons.Filled.FitnessCenter
-                            NavigationItem.Wearable -> Icons.Filled.Watch
+                            NavigationItem.Health -> Icons.Filled.Watch
                             NavigationItem.Profile -> Icons.Filled.Person
                         },
                         contentDescription = item.title

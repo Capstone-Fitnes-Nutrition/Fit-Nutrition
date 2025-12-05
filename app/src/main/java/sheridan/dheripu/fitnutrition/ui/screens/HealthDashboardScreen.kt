@@ -20,6 +20,7 @@ import sheridan.dheripu.fitnutrition.data.HealthViewModel
  */
 @Composable
 fun HealthDashboardScreen(
+    paddingValues: PaddingValues,
     viewModel: HealthViewModel,
     onLoginClick: () -> Unit,
     onLogoutClick: () -> Unit

@@ -114,7 +114,7 @@ fun MainAppScreen(onLogout: () -> Unit) {
         NavigationItem.Home,
         NavigationItem.Nutrition,
         NavigationItem.Fitness,
-        NavigationItem.Wearable,
+        NavigationItem.Health,
         NavigationItem.Profile
     )
     val currentScreen = navigationItems.find { it.route == currentRoute } ?: NavigationItem.Home
@@ -132,7 +132,12 @@ fun MainAppScreen(onLogout: () -> Unit) {
             is NavigationItem.Home -> HomeScreen(Modifier.padding(innerPadding))
             is NavigationItem.Nutrition -> NutritionScreen(Modifier.padding(innerPadding))
             is NavigationItem.Fitness -> FitnessScreen(Modifier.padding(innerPadding))
-            is NavigationItem.Wearable -> WearableScreen(healthViewModel, Modifier.padding(innerPadding))
+            is NavigationItem.Health -> HealthDashboardScreen(
+                viewModel = healthViewModel,
+                onLoginClick = { /* TODO: Open OAuth URL */ },
+                onLogoutClick = { healthViewModel.logout() },
+                paddingValues = innerPadding
+            )
             is NavigationItem.Profile -> ProfileScreen(
                 onLogout = onLogout,
                 modifier = Modifier.padding(innerPadding)
