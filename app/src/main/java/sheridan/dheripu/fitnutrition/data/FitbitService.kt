@@ -3,14 +3,16 @@ package sheridan.dheripu.fitnutrition.data
 import android.content.Context
 import android.content.SharedPreferences
 import sheridan.dheripu.fitnutrition.BuildConfig
-import sheridan.dheripu.fitnutrition.model.*
+import sheridan.dheripu.fitnutrition.model.FitbitAuthResponse
+import sheridan.dheripu.fitnutrition.model.HealthMetrics
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Date
+import java.util.Locale
 
 class FitbitService(private val context: Context) {
 
     private val prefs: SharedPreferences = context.getSharedPreferences("fitbit_prefs", Context.MODE_PRIVATE)
-    private val api: FitbitApiService = FitbitRetrofitClient.api
+    private val api = FitbitRetrofitClient.api
 
     private val clientId = BuildConfig.FITBIT_CLIENT_ID
     private val clientSecret = BuildConfig.FITBIT_CLIENT_SECRET
@@ -24,16 +26,8 @@ class FitbitService(private val context: Context) {
         private const val KEY_USER_ID = "user_id"
     }
 
-    /**
-     * Check if user is authenticated
-     */
-    fun isUserAuthenticated(): Boolean {
-        return getAccessToken() != null
-    }
+    fun isUserAuthenticated(): Boolean = getAccessToken() != null
 
-    /**
-     * Generate OAuth authorization URL
-     */
     fun generateAuthorizationUrl(): String {
         return "https://www.fitbit.com/oauth2/authorize?" +
                 "client_id=$clientId&" +
@@ -42,9 +36,6 @@ class FitbitService(private val context: Context) {
                 "redirect_uri=$redirectUri"
     }
 
-    /**
-     * Exchange authorization code for access token
-     */
     suspend fun exchangeCodeForToken(code: String): Result<FitbitAuthResponse> {
         return try {
             val response = api.getAccessToken(
@@ -57,41 +48,31 @@ class FitbitService(private val context: Context) {
 
             if (response.isSuccessful && response.body() != null) {
                 val authResponse = response.body()!!
-                saveTokens(
-                    accessToken = authResponse.accessToken,
-                    refreshToken = authResponse.refreshToken,
-                    userId = authResponse.userId
-                )
+                saveTokens(authResponse.accessToken, authResponse.refreshToken, authResponse.userId)
                 Result.success(authResponse)
             } else {
-                Result.failure(Exception("Failed to get token: ${response.code()}"))
+                Result.failure(Exception("Authentication failed: ${response.code()}"))
             }
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
-    /**
-     * Fetch daily activity data
-     */
     suspend fun fetchDailyActivity(): Result<HealthMetrics> {
         val token = getAccessToken() ?: return Result.failure(Exception("Not authenticated"))
         val today = dateFormat.format(Date())
 
         return try {
-            val response = api.getDailyActivitySummary(
-                date = today,
-                authHeader = "Bearer $token"
-            )
+            val response = api.getDailyActivitySummary(today, "Bearer $token")
 
             if (response.isSuccessful && response.body() != null) {
-                val activityData = response.body()!!
+                val data = response.body()!!
                 val metrics = HealthMetrics(
                     date = today,
-                    steps = activityData.summary?.steps ?: 0,
-                    distance = activityData.summary?.distances?.firstOrNull()?.distance ?: 0.0,
-                    calories = activityData.summary?.caloriesOut ?: 0,
-                    activeMinutes = activityData.summary?.veryActiveMinutes ?: 0
+                    steps = data.summary?.steps ?: 0,
+                    distance = data.summary?.distances?.firstOrNull()?.distance ?: 0.0,
+                    calories = data.summary?.caloriesOut ?: 0,
+                    activeMinutes = data.summary?.veryActiveMinutes ?: 0
                 )
                 Result.success(metrics)
             } else {
@@ -102,18 +83,12 @@ class FitbitService(private val context: Context) {
         }
     }
 
-    /**
-     * Fetch heart rate data
-     */
     suspend fun fetchHeartRateData(): Result<Int> {
         val token = getAccessToken() ?: return Result.failure(Exception("Not authenticated"))
         val today = dateFormat.format(Date())
 
         return try {
-            val response = api.getHeartRateData(
-                date = today,
-                authHeader = "Bearer $token"
-            )
+            val response = api.getHeartRateData(today, "Bearer $token")
 
             if (response.isSuccessful && response.body() != null) {
                 val heartRate = response.body()!!.activitiesHeart?.firstOrNull()?.value?.restingHeartRate ?: 0
@@ -126,19 +101,10 @@ class FitbitService(private val context: Context) {
         }
     }
 
-    /**
-     * Clear stored user data
-     */
     fun clearFitbitUser() {
-        prefs.edit().apply {
-            remove(KEY_ACCESS_TOKEN)
-            remove(KEY_REFRESH_TOKEN)
-            remove(KEY_USER_ID)
-            apply()
-        }
+        prefs.edit().clear().apply()
     }
 
-    // Private helper methods
     private fun getAccessToken(): String? = prefs.getString(KEY_ACCESS_TOKEN, null)
 
     private fun saveTokens(accessToken: String, refreshToken: String, userId: String) {

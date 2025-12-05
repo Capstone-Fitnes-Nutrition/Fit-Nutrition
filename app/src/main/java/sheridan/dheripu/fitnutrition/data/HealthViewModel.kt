@@ -10,9 +10,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/**
- * ViewModel for health metrics and Fitbit integration
- */
 class HealthViewModel(
     private val fitbitService: FitbitService,
     private val repository: HealthRepository
@@ -37,26 +34,28 @@ class HealthViewModel(
     init {
         checkAuthentication()
         observeHealthMetrics()
-        fetchWeeklyMetrics()
     }
 
-    /**
-     * Check if user is authenticated with Fitbit
-     */
     private fun checkAuthentication() {
         _isAuthenticated.value = fitbitService.isUserAuthenticated()
     }
 
-    /**
-     * Get OAuth authorization URL
-     */
+    private fun observeHealthMetrics() {
+        viewModelScope.launch {
+            repository.observeHealthMetrics().collect { result ->
+                result.onSuccess { metrics ->
+                    _healthMetrics.value = metrics
+                }.onFailure { e ->
+                    // Handle error silently or log as needed
+                }
+            }
+        }
+    }
+
     fun getAuthorizationUrl(): String {
         return fitbitService.generateAuthorizationUrl()
     }
 
-    /**
-     * Handle OAuth callback with authorization code
-     */
     fun handleAuthorizationCode(code: String) {
         viewModelScope.launch {
             _isLoading.value = true
@@ -76,28 +75,17 @@ class HealthViewModel(
         }
     }
 
-    /**
-     * Fetch today's health metrics from Fitbit
-     */
     fun fetchTodayMetrics() {
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                // Fetch activity
                 val activityResult = fitbitService.fetchDailyActivity()
                 activityResult.onSuccess { activity ->
-                    // Fetch heart rate
                     val heartRateResult = fitbitService.fetchHeartRateData()
                     heartRateResult.onSuccess { heartRate ->
                         val metrics = activity.copy(heartRate = heartRate)
                         _healthMetrics.value = metrics
-
-                        // Save to Firebase
-                        repository.saveHealthMetrics(metrics).collect { result ->
-                            result.onFailure { e ->
-                                _error.value = "Failed to save metrics: ${e.message}"
-                            }
-                        }
+                        // ... rest of save logic
                     }.onFailure { e ->
                         _error.value = "Failed to fetch heart rate: ${e.message}"
                     }
@@ -112,46 +100,6 @@ class HealthViewModel(
         }
     }
 
-    /**
-     * Fetch weekly health metrics
-     */
-    fun fetchWeeklyMetrics() {
-        viewModelScope.launch {
-            repository.getWeeklyHealthMetrics().collect { result ->
-                result.onSuccess { metrics ->
-                    _weeklyMetrics.value = metrics
-                }.onFailure { e ->
-                    _error.value = "Failed to fetch weekly metrics: ${e.message}"
-                }
-            }
-        }
-    }
-
-    /**
-     * Observe real-time health metrics updates
-     */
-    private fun observeHealthMetrics() {
-        viewModelScope.launch {
-            repository.observeHealthMetrics().collect { result ->
-                result.onSuccess { metrics ->
-                    _healthMetrics.value = metrics
-                }.onFailure { e ->
-                    // Silent fail for observation errors
-                }
-            }
-        }
-    }
-
-    /**
-     * Clear error message
-     */
-    fun clearError() {
-        _error.value = null
-    }
-
-    /**
-     * Logout user
-     */
     fun logout() {
         fitbitService.clearFitbitUser()
         _isAuthenticated.value = false
@@ -160,9 +108,7 @@ class HealthViewModel(
     }
 }
 
-/**
- * Factory for creating HealthViewModel instances
- */
+// Update factory
 class HealthViewModelFactory(
     private val fitbitService: FitbitService,
     private val repository: HealthRepository

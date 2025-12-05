@@ -6,16 +6,15 @@ import com.google.gson.annotations.SerializedName
 data class HealthMetrics(
     val heartRate: Int = 0,
     val steps: Int = 0,
-    val caloriesBurned: Double = 0.0,
+    val calories: Int = 0,
     val distance: Double = 0.0,
     val activeMinutes: Int = 0,
     val timestamp: Long = System.currentTimeMillis(),
     val lastSyncTime: String = "",
     val activityLevel: String = "LOW",
     val date: String = ""
-) {
-    constructor() : this(0, 0, 0.0, 0.0, 0, System.currentTimeMillis(), "", "LOW", "")
-}
+)
+
 
 // ============= Fitbit Authentication =============
 data class FitbitAuthResponse(
@@ -29,9 +28,7 @@ data class FitbitAuthResponse(
     val userId: String = "",
     @SerializedName("token_type")
     val tokenType: String = "Bearer"
-) {
-    constructor() : this("", "", 0, "", "Bearer")
-}
+)
 
 data class FitbitUser(
     val userId: String = "",
@@ -40,14 +37,12 @@ data class FitbitUser(
     val refreshToken: String = "",
     val tokenExpiresAt: Long = 0,
     val isAuthenticated: Boolean = false
-) {
-    constructor() : this("", "", "", "", 0, false)
-}
+)
 
 // ============= Activity Response =============
 data class FitbitActivityResponse(
     val activities: List<Activity> = emptyList(),
-    val summary: Summary = Summary()
+    val summary: Summary? = null
 ) {
     data class Activity(
         val activityId: Int = 0,
@@ -59,46 +54,51 @@ data class FitbitActivityResponse(
 
     data class Summary(
         val steps: Int = 0,
-        val distance: Double = 0.0,
+        val distances: List<Distance> = emptyList(),
         @SerializedName("caloriesOut")
-        val caloriesBurned: Int = 0,
+        val caloriesOut: Int = 0,
         @SerializedName("veryActiveMinutes")
-        val activeMinutes: Int = 0
-    ) {
-        constructor() : this(0, 0.0, 0, 0)
-    }
+        val veryActiveMinutes: Int = 0,
+        @SerializedName("fairlyActiveMinutes")
+        val fairlyActiveMinutes: Int = 0,
+        @SerializedName("lightlyActiveMinutes")
+        val lightlyActiveMinutes: Int = 0
+    )
+
+    data class Distance(
+        val activity: String = "",
+        val distance: Double = 0.0
+    )
 }
 
 // ============= Heart Rate Response =============
 data class FitbitHeartRateResponse(
     @SerializedName("activities-heart")
-    val activitiesHeart: List<HeartRateData> = emptyList()
+    val activitiesHeart: List<HeartRateData>? = null
 ) {
     data class HeartRateData(
         val dateTime: String = "",
-        val value: Value = Value()
+        val value: Value? = null
     ) {
         data class Value(
             val restingHeartRate: Int = 0,
             val heartRateZones: List<Zone> = emptyList()
-        ) {
-            constructor() : this(0, emptyList())
+        )
 
-            data class Zone(
-                val name: String = "",
-                val min: Int = 0,
-                val max: Int = 0,
-                val minutes: Int = 0,
-                val caloriesOut: Double = 0.0
-            )
-        }
+        data class Zone(
+            val name: String = "",
+            val min: Int = 0,
+            val max: Int = 0,
+            val minutes: Int = 0,
+            val caloriesOut: Double = 0.0
+        )
     }
 }
 
 // ============= Sleep Response =============
 data class FitbitSleepResponse(
     val sleep: List<SleepData> = emptyList(),
-    val summary: SleepSummary = SleepSummary()
+    val summary: SleepSummary? = null
 ) {
     data class SleepData(
         val dateOfSleep: String = "",
@@ -112,14 +112,12 @@ data class FitbitSleepResponse(
         val totalMinutesAsleep: Long = 0,
         val totalSleepRecords: Int = 0,
         val totalTimeInBed: Long = 0
-    ) {
-        constructor() : this(0, 0, 0)
-    }
+    )
 }
 
 // ============= User Profile Response =============
 data class FitbitProfileResponse(
-    val user: UserProfile = UserProfile()
+    val user: UserProfile? = null
 ) {
     data class UserProfile(
         @SerializedName("encodedId")
@@ -132,9 +130,7 @@ data class FitbitProfileResponse(
         val height: Double = 0.0,
         val gender: String = "",
         val aboutMe: String = ""
-    ) {
-        constructor() : this("", "", "", "", 0, 0.0, 0.0, "", "")
-    }
+    )
 }
 
 // ============= Error Response =============

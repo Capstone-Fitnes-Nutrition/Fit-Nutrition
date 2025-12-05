@@ -16,11 +16,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import sheridan.dheripu.fitnutrition.AuthManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
+import sheridan.dheripu.fitnutrition.data.FitbitService
+import sheridan.dheripu.fitnutrition.data.HealthViewModel
+import sheridan.dheripu.fitnutrition.data.HealthViewModelFactory
+import sheridan.dheripu.fitnutrition.repository.HealthRepository
 import sheridan.dheripu.fitnutrition.model.NavigationItem
 import sheridan.dheripu.fitnutrition.ui.navigation.BottomNavigationBar
 import sheridan.dheripu.fitnutrition.ui.screens.*
-import sheridan.dheripu.fitnutrition.ui.theme.FitNutritionTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -36,13 +40,9 @@ fun FitNutritionApp() {
     var showSplash by remember { mutableStateOf(true) }
     var appState by remember { mutableStateOf<AppState>(AppState.Loading) }
 
-    // Check auth state on app start
     LaunchedEffect(Unit) {
-        // Simulate splash screen delay
         kotlinx.coroutines.delay(1500)
         showSplash = false
-
-        // Check if user is logged in
         appState = if (AuthManager.isUserLoggedIn) {
             AppState.MainApp
         } else {
@@ -102,6 +102,14 @@ fun AuthNavigation(onAuthSuccess: () -> Unit) {
 fun MainAppScreen(onLogout: () -> Unit) {
     var currentRoute by remember { mutableStateOf(NavigationItem.Home.route) }
 
+    val context = LocalContext.current
+    val healthViewModel: HealthViewModel = viewModel(
+        factory = HealthViewModelFactory(
+            FitbitService(context),
+            HealthRepository()
+        )
+    )
+
     val navigationItems = listOf(
         NavigationItem.Home,
         NavigationItem.Nutrition,
@@ -110,7 +118,6 @@ fun MainAppScreen(onLogout: () -> Unit) {
         NavigationItem.Profile
     )
     val currentScreen = navigationItems.find { it.route == currentRoute } ?: NavigationItem.Home
-
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -125,7 +132,7 @@ fun MainAppScreen(onLogout: () -> Unit) {
             is NavigationItem.Home -> HomeScreen(Modifier.padding(innerPadding))
             is NavigationItem.Nutrition -> NutritionScreen(Modifier.padding(innerPadding))
             is NavigationItem.Fitness -> FitnessScreen(Modifier.padding(innerPadding))
-            is NavigationItem.Wearable -> WearableScreen(Modifier.padding(innerPadding))
+            is NavigationItem.Wearable -> WearableScreen(healthViewModel, Modifier.padding(innerPadding))
             is NavigationItem.Profile -> ProfileScreen(
                 onLogout = onLogout,
                 modifier = Modifier.padding(innerPadding)

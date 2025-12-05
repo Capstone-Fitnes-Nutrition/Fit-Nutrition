@@ -49,7 +49,7 @@ fun HealthDashboardScreen(
         if (error != null) {
             item {
                 ErrorCard(message = error!!) {
-                    viewModel.clearError()
+//                    viewModel.clearError()
                 }
             }
         }
@@ -168,7 +168,7 @@ fun MetricsGrid(metrics: HealthMetrics) {
         ) {
             MetricCard(
                 title = "Calories",
-                value = metrics.caloriesBurned.toInt().toString(),
+                value = metrics.calories.toString(),
                 icon = "🔥",
                 modifier = Modifier.weight(1f)
             )
@@ -324,11 +324,11 @@ fun WeeklyMetricsSection(metrics: List<HealthMetrics>) {
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                val totalSteps = metrics.sumOf { it.steps }
+                val totalSteps = metrics.sumOf { it.steps.toLong() }
                 val avgHeartRate = if (metrics.isNotEmpty()) {
-                    metrics.sumOf { it.heartRate } / metrics.size
+                    (metrics.sumOf { it.heartRate.toLong() } / metrics.size).toInt()
                 } else 0
-                val totalCalories = metrics.sumOf { it.caloriesBurned }.toInt()
+                val totalCalories = metrics.sumOf { it.calories.toLong() }
 
                 WeeklyMetricRow("Total Steps", totalSteps.toString())
                 WeeklyMetricRow("Avg Heart Rate", "$avgHeartRate bpm")
