@@ -18,7 +18,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -36,7 +35,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
 import sheridan.dheripu.fitnutrition.data.FitnessViewModel
+import sheridan.dheripu.fitnutrition.data.RetrofitInstance
 import sheridan.dheripu.fitnutrition.model.Exercise
 import sheridan.dheripu.fitnutrition.model.WorkoutItem
 import sheridan.dheripu.fitnutrition.ui.components.ScreenHeader
@@ -48,7 +51,7 @@ fun FitnessScreen(
     viewModel: FitnessViewModel = viewModel()
 ) {
     var searchString by remember { mutableStateOf("") }
-    val exercises = viewModel.exercises
+    var exercises by remember { mutableStateOf<List<Exercise>>(emptyList()) }
     val myWorkouts = viewModel.myWorkouts
     var selectedExercise by remember { mutableStateOf<Exercise?>(null) }
     var displayInput by remember { mutableStateOf(false) }
@@ -56,7 +59,6 @@ fun FitnessScreen(
     var setsInput by remember { mutableStateOf("") }
     var repsInput by remember { mutableStateOf("") }
     var timeInput by remember { mutableStateOf("") }
-    var selectedFilter by remember { mutableStateOf("") }
 
     Column(
         modifier = Modifier
@@ -82,64 +84,36 @@ fun FitnessScreen(
             )
 
             Button(
-                onClick = { viewModel.fetchExercisesByBodyPart(searchString) },
+                onClick = {
+                    if (searchString.isNotBlank()) {
+                        val call = RetrofitInstance.api.getExercisesByBodyPart(searchString.lowercase())
+                        call.enqueue(object : Callback<List<Exercise>>{
+                            override fun onResponse(
+                                call: Call<List<Exercise>>,
+                                response: Response<List<Exercise>>
+                            ){
+                            if (response.isSuccessful) {
+                                exercises = response.body()?: emptyList()
+                            } else {
+                                exercises = emptyList()
+                            }
+                            }
+                            override fun onFailure(call: Call<List<Exercise>>, t: Throwable) {
+                                exercises = emptyList()
+                            }
+                        })
+
+                    } else {
+                        exercises = emptyList()
+                    }
+                },
                 modifier = Modifier.align(Alignment.CenterVertically)
             ) {
                 Text("Go!")
             }
         }
 
-        if (searchString.isNotBlank() || selectedFilter.isNotBlank()) {
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(
-                onClick = {
-                    selectedFilter = ""
-                    searchString = ""
-                    viewModel.clearExercises()
-                },
-            ) {
-                Text("Clear Filters")
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(
-            text = "Exercise Filters",
-            style = MaterialTheme.typography.titleSmall,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            val bodyParts = listOf("Chest", "Back", "Waist")
-
-            bodyParts.forEach { part ->
-                FilterChip(
-                    selected = (selectedFilter == part),
-                    onClick = {
-                        selectedFilter = part
-                        viewModel.fetchExercisesByBodyPart(part)
-                    },
-                    label = {
-                        Text(part)
-                    }
-                )
-            }
-        }
-
-        viewModel.errorMessage?.let { error ->
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = error,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(8.dp)
-            )
-        }
-
+        Spacer(Modifier.height(16.dp))
 
         if (exercises.isNotEmpty()) {
             LazyColumn(
@@ -257,9 +231,8 @@ fun FitnessScreen(
                         timeInput = ""
                         selectedExercise = null
                         displayInput = false
-                        viewModel.clearExercises()
+                        exercises = emptyList()
                         searchString = ""
-                        selectedFilter = ""
                     }
                 ) {
                     Text("Add!")
