@@ -16,15 +16,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.viewmodel.compose.viewModel
-import sheridan.dheripu.fitnutrition.data.FitbitService
-import sheridan.dheripu.fitnutrition.data.HealthViewModel
-import sheridan.dheripu.fitnutrition.data.HealthViewModelFactory
-import sheridan.dheripu.fitnutrition.repository.HealthRepository
 import sheridan.dheripu.fitnutrition.model.NavigationItem
 import sheridan.dheripu.fitnutrition.ui.navigation.BottomNavigationBar
-import sheridan.dheripu.fitnutrition.ui.screens.*
+import sheridan.dheripu.fitnutrition.ui.screens.FitnessScreen
+import sheridan.dheripu.fitnutrition.ui.screens.HomeScreen
+import sheridan.dheripu.fitnutrition.ui.screens.LoginScreen
+import sheridan.dheripu.fitnutrition.ui.screens.NutritionScreen
+import sheridan.dheripu.fitnutrition.ui.screens.ProfileScreen
+import sheridan.dheripu.fitnutrition.ui.screens.RegisterScreen
+import sheridan.dheripu.fitnutrition.ui.screens.WearableScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -102,14 +102,6 @@ fun AuthNavigation(onAuthSuccess: () -> Unit) {
 fun MainAppScreen(onLogout: () -> Unit) {
     var currentRoute by remember { mutableStateOf(NavigationItem.Home.route) }
 
-    val context = LocalContext.current
-    val healthViewModel: HealthViewModel = viewModel(
-        factory = HealthViewModelFactory(
-            FitbitService(context),
-            HealthRepository()
-        )
-    )
-
     val navigationItems = listOf(
         NavigationItem.Home,
         NavigationItem.Nutrition,
@@ -132,12 +124,7 @@ fun MainAppScreen(onLogout: () -> Unit) {
             is NavigationItem.Home -> HomeScreen(Modifier.padding(innerPadding))
             is NavigationItem.Nutrition -> NutritionScreen(Modifier.padding(innerPadding))
             is NavigationItem.Fitness -> FitnessScreen(Modifier.padding(innerPadding))
-            is NavigationItem.Health -> HealthDashboardScreen(
-                viewModel = healthViewModel,
-                onLoginClick = { /* TODO: Open OAuth URL */ },
-                onLogoutClick = { healthViewModel.logout() },
-                paddingValues = innerPadding
-            )
+            is NavigationItem.Health ->  WearableScreen(padding = Modifier.padding(innerPadding))
             is NavigationItem.Profile -> ProfileScreen(
                 onLogout = onLogout,
                 modifier = Modifier.padding(innerPadding)

@@ -25,6 +25,8 @@ android {
             "\"${properties.getProperty("FITBIT_CLIENT_ID")}\"")
         buildConfigField("String", "FITBIT_CLIENT_SECRET",
             "\"${properties.getProperty("FITBIT_CLIENT_SECRET")}\"")
+        buildConfigField("String", "FITBIT_REDIRECT_URI",
+            "\"${properties.getProperty("FITBIT_REDIRECT_URI")}\"")
     }
 
     buildTypes {
