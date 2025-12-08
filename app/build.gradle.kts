@@ -69,6 +69,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation(libs.androidx.room.compiler)
     implementation(libs.core.ktx)
+    implementation(libs.androidx.navigation.compose)
     debugImplementation("androidx.compose.ui:ui-tooling")
     implementation("androidx.activity:activity-compose:1.9.0")
     implementation("androidx.compose.material:material-icons-extended:1.6.7")

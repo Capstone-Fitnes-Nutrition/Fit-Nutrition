@@ -6,6 +6,8 @@ import retrofit2.http.*
 
 interface FitbitApiService {
 
+    // ============= Activity APIs =============
+
     @GET("1/user/-/activities/date/{date}.json")
     suspend fun getDailyActivitySummary(
         @Path("date") date: String,
@@ -29,22 +31,31 @@ interface FitbitApiService {
         @Header("Authorization") authHeader: String
     ): Response<FitbitProfileResponse>
 
+    // ============= OAuth Token APIs =============
+
+    /**
+     * Exchange authorization code for access token
+     * REQUIRES: Basic Authorization header with Base64(client_id:client_secret)
+     */
     @FormUrlEncoded
     @POST("oauth2/token")
     suspend fun getAccessToken(
+        @Header("Authorization") basicAuth: String,
         @Field("client_id") clientId: String,
-        @Field("client_secret") clientSecret: String,
         @Field("code") code: String,
         @Field("grant_type") grantType: String,
         @Field("redirect_uri") redirectUri: String
     ): Response<FitbitAuthResponse>
 
+    /**
+     * Refresh an expired access token
+     * REQUIRES: Basic Authorization header with Base64(client_id:client_secret)
+     */
     @FormUrlEncoded
     @POST("oauth2/token")
     suspend fun refreshAccessToken(
-        @Field("client_id") clientId: String,
-        @Field("client_secret") clientSecret: String,
-        @Field("refresh_token") refreshToken: String,
-        @Field("grant_type") grantType: String
+        @Header("Authorization") basicAuth: String,
+        @Field("grant_type") grantType: String,
+        @Field("refresh_token") refreshToken: String
     ): Response<FitbitAuthResponse>
 }
