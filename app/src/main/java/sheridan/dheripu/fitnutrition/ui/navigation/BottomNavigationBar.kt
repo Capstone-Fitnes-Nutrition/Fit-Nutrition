@@ -1,5 +1,6 @@
 package sheridan.dheripu.fitnutrition.ui.navigation
 
+import androidx.compose.foundation.layout.PaddingValues
 import sheridan.dheripu.fitnutrition.model.NavigationItem
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FitnessCenter
@@ -22,8 +23,8 @@ fun BottomNavigationBar(
         NavigationItem.Home,
         NavigationItem.Nutrition,
         NavigationItem.Fitness,
-        NavigationItem.Wearable,
-        NavigationItem.Profile
+        NavigationItem.Health ,
+        NavigationItem.Profile ,
     )
 
     NavigationBar {
@@ -36,7 +37,7 @@ fun BottomNavigationBar(
                             NavigationItem.Home -> Icons.Filled.Home
                             NavigationItem.Nutrition -> Icons.Filled.LocalDining
                             NavigationItem.Fitness -> Icons.Filled.FitnessCenter
-                            NavigationItem.Wearable -> Icons.Filled.Watch
+                            NavigationItem.Health -> Icons.Filled.Watch
                             NavigationItem.Profile -> Icons.Filled.Person
                         },
                         contentDescription = item.title
