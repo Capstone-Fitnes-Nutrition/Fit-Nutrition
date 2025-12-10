@@ -132,8 +132,7 @@ fun FitNutritionApp(healthViewModel: HealthViewModel) {
                     onLogout = {
                         AuthManager.logout()
                         appState = AppState.Auth
-                    }
-                    onLogout = { appState = AppState.Auth },
+                    },
                     onNavigateToRecipeDetail = { recipeId ->
                         appState = AppState.RecipeDetail(recipeId)
                     }

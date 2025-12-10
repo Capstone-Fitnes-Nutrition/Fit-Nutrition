@@ -40,7 +40,8 @@ import sheridan.dheripu.fitnutrition.ui.components.ScreenHeader
 fun NutritionScreen(
     modifier: Modifier = Modifier,
     onRecipeClick: (Int) -> Unit,
-    recipeViewModel: RecipeViewModel = viewModel()
+    recipeViewModel: RecipeViewModel = viewModel(),
+    padding: Modifier
 ) {
     val recipes by recipeViewModel.recipes.collectAsState()
     val isLoading by recipeViewModel.isLoading.collectAsState()
