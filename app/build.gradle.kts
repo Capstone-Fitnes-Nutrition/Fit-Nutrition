@@ -1,6 +1,5 @@
 import java.util.Properties
 val properties = Properties()
-properties.load(file("local.properties").inputStream())
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -25,6 +24,8 @@ android {
             "\"${properties.getProperty("FITBIT_CLIENT_ID")}\"")
         buildConfigField("String", "FITBIT_CLIENT_SECRET",
             "\"${properties.getProperty("FITBIT_CLIENT_SECRET")}\"")
+        buildConfigField("String", "FITBIT_REDIRECT_URI",
+            "\"${properties.getProperty("FITBIT_REDIRECT_URI")}\"")
     }
 
     buildTypes {
@@ -67,6 +68,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation(libs.androidx.room.compiler)
     implementation(libs.core.ktx)
+    implementation(libs.androidx.navigation.compose)
     debugImplementation("androidx.compose.ui:ui-tooling")
     implementation("androidx.activity:activity-compose:1.9.0")
     implementation("androidx.compose.material:material-icons-extended:1.6.7")

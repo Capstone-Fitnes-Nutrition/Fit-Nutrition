@@ -27,7 +27,7 @@
                 <data
                     android:scheme="fitnutrition"
                     android:host="fitbit"
-                    android:pathPrefix="/callback" />
+                    android:path="/callback" />
             </intent-filter>
 
         </activity>

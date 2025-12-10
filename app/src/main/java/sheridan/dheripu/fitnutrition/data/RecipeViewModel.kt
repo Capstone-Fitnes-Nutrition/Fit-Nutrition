@@ -66,4 +66,12 @@ class RecipeViewModel : ViewModel() {
         val newFilters = currentFilters.value.copy(minProtein = minProtein)
         searchRecipes(newFilters)
     }
+
+    suspend fun getRecipeById(id: Int): Recipe? {
+        return try {
+            repository.getRecipeById(id)
+        } catch (e: Exception) {
+            null
+        }
+    }
 }
