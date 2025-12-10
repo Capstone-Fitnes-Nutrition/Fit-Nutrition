@@ -1,5 +1,6 @@
 package sheridan.dheripu.fitnutrition.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -38,6 +39,7 @@ import sheridan.dheripu.fitnutrition.ui.components.ScreenHeader
 @Composable
 fun NutritionScreen(
     modifier: Modifier = Modifier,
+    onRecipeClick: (Int) -> Unit,
     recipeViewModel: RecipeViewModel = viewModel()
 ) {
     val recipes by recipeViewModel.recipes.collectAsState()
@@ -122,7 +124,8 @@ fun NutritionScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 items(recipes) { recipe ->
-                    RecipeCard(recipe = recipe)
+                    RecipeCard(recipe = recipe,
+                    onRecipeClick = onRecipeClick)
                 }
             }
         }
@@ -281,9 +284,12 @@ fun RecipeFiltersSection(
 }
 
 @Composable
-fun RecipeCard(recipe: Recipe) {
+fun RecipeCard(recipe: Recipe,
+               onRecipeClick: (Int) -> Unit
+) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth()
+            .clickable { onRecipeClick(recipe.id) },
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column {

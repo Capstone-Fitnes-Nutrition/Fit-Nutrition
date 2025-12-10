@@ -74,7 +74,17 @@ fun FitNutritionApp() {
             }
             AppState.MainApp -> {
                 MainAppScreen(
-                    onLogout = { appState = AppState.Auth }
+                    onLogout = { appState = AppState.Auth },
+                    onNavigateToRecipeDetail = { recipeId ->
+                        appState = AppState.RecipeDetail(recipeId)
+                    }
+                )
+            }
+            is AppState.RecipeDetail -> {
+                // Show recipe detail screen
+                RecipeDetailScreen(
+                    recipeId = (appState as AppState.RecipeDetail).recipeId,
+                    onBackClick = { appState = AppState.MainApp }
                 )
             }
         }
@@ -99,7 +109,9 @@ fun AuthNavigation(onAuthSuccess: () -> Unit) {
 }
 
 @Composable
-fun MainAppScreen(onLogout: () -> Unit) {
+fun MainAppScreen(onLogout: () -> Unit,
+                  onNavigateToRecipeDetail: (Int) -> Unit
+) {
     var currentRoute by remember { mutableStateOf(NavigationItem.Home.route) }
 
     val navigationItems = listOf(
@@ -123,7 +135,9 @@ fun MainAppScreen(onLogout: () -> Unit) {
     ) { innerPadding ->
         when (currentScreen) {
             is NavigationItem.Home -> HomeScreen(Modifier.padding(innerPadding))
-            is NavigationItem.Nutrition -> NutritionScreen(Modifier.padding(innerPadding))
+            is NavigationItem.Nutrition -> NutritionScreen(
+                modifier = Modifier.padding(innerPadding),
+                onRecipeClick = onNavigateToRecipeDetail  )
             is NavigationItem.Fitness -> FitnessScreen(Modifier.padding(innerPadding))
             is NavigationItem.Wearable -> WearableScreen(Modifier.padding(innerPadding))
             is NavigationItem.Profile -> ProfileScreen(
@@ -138,4 +152,5 @@ sealed class AppState {
     object Loading : AppState()
     object Auth : AppState()
     object MainApp : AppState()
+    data class RecipeDetail(val recipeId: Int) : AppState()
 }
