@@ -7,14 +7,20 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
+import androidx.compose.ui.platform.LocalContext
 import sheridan.dheripu.fitnutrition.data.HealthViewModel
 import sheridan.dheripu.fitnutrition.model.NavigationItem
 import sheridan.dheripu.fitnutrition.ui.navigation.BottomNavigationBar
@@ -33,13 +39,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         Log.d(TAG, "MainActivity onCreate")
-
-        // Handle Fitbit OAuth callback
         handleFitbitCallback(intent)
 
         setContent {
             FitNutritionTheme {
-                MainScreen(healthViewModel)
+                FitNutritionApp(healthViewModel)
             }
         }
     }
@@ -52,105 +56,157 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * CRITICAL: Handle Fitbit OAuth callback
-     * This captures the authorization code when Fitbit redirects back to your app
+     * Handle Fitbit OAuth callback
      */
     private fun handleFitbitCallback(intent: Intent?) {
         Log.d(TAG, "========== FITBIT CALLBACK HANDLER ==========")
-        Log.d(TAG, "Intent: $intent")
-        Log.d(TAG, "Intent action: ${intent?.action}")
-        Log.d(TAG, "Intent data: ${intent?.data}")
-
         val data: Uri? = intent?.data
 
         if (data != null) {
             Log.d(TAG, "Intent data URI: $data")
-            Log.d(TAG, "URI scheme: ${data.scheme}")
-            Log.d(TAG, "URI host: ${data.host}")
-            Log.d(TAG, "URI path: ${data.path}")
 
-            // Check if this is the Fitbit callback
             if (data.scheme == "fitnutrition" && data.host == "fitbit") {
                 Log.d(TAG, "✅ Fitbit callback detected!")
 
                 val code = data.getQueryParameter("code")
                 val error = data.getQueryParameter("error")
 
-                Log.d(TAG, "Authorization code: ${code?.take(10)}...")
-                Log.d(TAG, "Error parameter: $error")
-
                 when {
                     code != null -> {
                         Log.d(TAG, "✅ Authorization code received, processing...")
-                        Log.d(TAG, "Calling healthViewModel.handleAuthorizationCode()")
-
-                        // Pass the code to ViewModel to exchange for token
                         healthViewModel.handleAuthorizationCode(code)
                     }
                     error != null -> {
                         Log.e(TAG, "❌ OAuth error: $error")
-                        // TODO: Show error to user
                     }
                     else -> {
                         Log.w(TAG, "⚠️ Callback received but no code or error found")
                     }
                 }
-            } else {
-                Log.d(TAG, "Not a Fitbit callback (scheme=${data.scheme}, host=${data.host})")
             }
-        } else {
-            Log.d(TAG, "Intent data is null - not a deep link")
         }
-
         Log.d(TAG, "========== FITBIT CALLBACK HANDLER END ==========")
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(healthViewModel: HealthViewModel) {
-    val navController = rememberNavController()
+fun FitNutritionApp(healthViewModel: HealthViewModel) {
+    var showSplash by remember { mutableStateOf(true) }
+    var appState by remember { mutableStateOf<AppState>(AppState.Loading) }
+
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(1500)
+        showSplash = false
+        appState = if (AuthManager.isUserLoggedIn) {
+            AppState.MainApp
+        } else {
+            AppState.Auth
+        }
+    }
+
+    if (showSplash) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator()
+        }
+    } else {
+        when (appState) {
+            AppState.Loading -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+            AppState.Auth -> {
+                AuthNavigation(
+                    onAuthSuccess = { appState = AppState.MainApp }
+                )
+            }
+            AppState.MainApp -> {
+                MainAppScreen(
+                    healthViewModel = healthViewModel,
+                    onLogout = {
+                        AuthManager.logout()
+                        appState = AppState.Auth
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun AuthNavigation(onAuthSuccess: () -> Unit) {
+    var showLogin by remember { mutableStateOf(true) }
+
+    if (showLogin) {
+        LoginScreen(
+            onLoginSuccess = onAuthSuccess,
+            onNavigateToRegister = { showLogin = false }
+        )
+    } else {
+        RegisterScreen(
+            onRegisterSuccess = onAuthSuccess,
+            onNavigateToLogin = { showLogin = true }
+        )
+    }
+}
+
+@Composable
+fun MainAppScreen(
+    healthViewModel: HealthViewModel,
+    onLogout: () -> Unit
+) {
     var currentRoute by remember { mutableStateOf(NavigationItem.Home.route) }
+    val context = LocalContext.current
+
+    val navigationItems = listOf(
+        NavigationItem.Home,
+        NavigationItem.Nutrition,
+        NavigationItem.Fitness,
+        NavigationItem.Health,
+        NavigationItem.Profile
+    )
+    val currentScreen = navigationItems.find { it.route == currentRoute } ?: NavigationItem.Home
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         bottomBar = {
             BottomNavigationBar(
-                currentRoute = currentRoute,
-                onItemSelected = { item ->
-                    currentRoute = item.route
-                    navController.navigate(item.route) {
-                        popUpTo(navController.graph.startDestinationId) {
-                            saveState = true
-                        }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                }
+                currentRoute = currentScreen.route,
+                onItemSelected = { screen -> currentRoute = screen.route }
             )
         }
     ) { innerPadding ->
-        NavHost(
-            navController = navController,
-            startDestination = NavigationItem.Home.route,
-            modifier = Modifier.padding(innerPadding)
-        ) {
-            composable(NavigationItem.Home.route) {
+        when (currentScreen) {
+            is NavigationItem.Home -> {
                 HomeScreen(padding = Modifier.padding(innerPadding))
             }
-            composable(NavigationItem.Nutrition.route) {
-                NutritionScreen()
+            is NavigationItem.Nutrition -> {
+                NutritionScreen(padding = Modifier.padding(innerPadding))
             }
-            composable(NavigationItem.Fitness.route) {
+            is NavigationItem.Fitness -> {
                 FitnessScreen(padding = Modifier.padding(innerPadding))
             }
-            composable(NavigationItem.Health.route) {
-                // Pass the shared ViewModel to WearableScreen
+            is NavigationItem.Health -> {
                 WearableScreen(padding = Modifier.padding(innerPadding))
             }
-            composable(NavigationItem.Profile.route) {
-                ProfileScreen( onLogout = TODO(), modifier = TODO())
+            is NavigationItem.Profile -> {
+                ProfileScreen(
+                    onLogout = onLogout,
+                    modifier = Modifier.padding(innerPadding)
+                )
             }
         }
     }
+}
+
+sealed class AppState {
+    object Loading : AppState()
+    object Auth : AppState()
+    object MainApp : AppState()
 }

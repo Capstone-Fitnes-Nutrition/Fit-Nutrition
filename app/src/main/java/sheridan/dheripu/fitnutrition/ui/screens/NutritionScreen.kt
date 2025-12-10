@@ -38,6 +38,7 @@ import sheridan.dheripu.fitnutrition.ui.components.ScreenHeader
 @Composable
 fun NutritionScreen(
     modifier: Modifier = Modifier,
+    padding : Modifier = Modifier,
     recipeViewModel: RecipeViewModel = viewModel()
 ) {
     val recipes by recipeViewModel.recipes.collectAsState()

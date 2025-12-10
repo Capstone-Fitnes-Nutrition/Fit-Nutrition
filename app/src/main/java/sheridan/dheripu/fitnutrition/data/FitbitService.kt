@@ -42,7 +42,7 @@ class FitbitService(private val context: Context) {
     }
 
     /**
-     * Check if user has valid authentication token
+     * Check for user valid authentication token
      */
     fun isUserAuthenticated(): Boolean {
         val token = getAccessToken()
@@ -60,7 +60,7 @@ class FitbitService(private val context: Context) {
     }
 
     /**
-     * Generate Fitbit OAuth authorization URL
+     * Generate Fitbit OAuth auth URL
      */
     fun generateAuthorizationUrl(): String {
         val url = "https://www.fitbit.com/oauth2/authorize?" +
@@ -104,7 +104,6 @@ class FitbitService(private val context: Context) {
         Log.d(TAG, "Redirect URI: $redirectUri")
 
         return try {
-            // Generate Basic Auth header (CRITICAL FIX!)
             val basicAuthHeader = getBasicAuthHeader()
 
             Log.d(TAG, "Making API call to exchange code for token...")

@@ -45,7 +45,7 @@ data class FitbitAuthResponse(
 )
 
 /**
- * User object for local storage (not used currently, but available for future)
+ * User object for local storage (not used currently)
  */
 data class FitbitUser(
     val userId: String = "",
@@ -177,7 +177,7 @@ data class FitbitProfileResponse(
     )
 }
 
-// ============= Error Response Models =============
+// ============= Error Response Models Stuff =============
 
 /**
  * Error response from Fitbit API
