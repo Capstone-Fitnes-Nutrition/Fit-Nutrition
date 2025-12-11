@@ -48,8 +48,8 @@ fun FitnessScreen(
     viewModel: FitnessViewModel = viewModel()
 ) {
     var searchString by remember { mutableStateOf("") }
-    val exercises = viewModel.exercises
-    val myWorkouts = viewModel.myWorkouts
+    val exercises = viewModel.exercises.value
+    val myWorkouts = viewModel.myWorkouts.value
     var selectedExercise by remember { mutableStateOf<Exercise?>(null) }
     var displayInput by remember { mutableStateOf(false) }
     var displayDetails by remember { mutableStateOf(false) }
