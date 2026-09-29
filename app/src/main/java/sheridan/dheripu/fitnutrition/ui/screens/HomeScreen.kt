@@ -15,7 +15,10 @@ import androidx.compose.ui.unit.dp
 import sheridan.dheripu.fitnutrition.ui.components.InfoCard
 
 @Composable
-fun HomeScreen(padding: Modifier) {
+@OptIn(ExperimentalMaterial3Api::class)
+fun HomeScreen(
+    padding: Modifier,
+    onNavigateToWorkoutAnalytics: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -121,6 +124,28 @@ fun HomeScreen(padding: Modifier) {
         ) {
             ListItem(
                 headlineContent = { Text("Start a Workout") },
+                leadingContent = {
+                    Icon(
+                        Icons.Default.Favorite,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                },
+                trailingContent = {
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
+                }
+            )
+        }
+
+        Card(
+            onClick = onNavigateToWorkoutAnalytics,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp)
+
+        ) {
+            ListItem(
+                headlineContent = { Text("View Workout Analytics") },
                 leadingContent = {
                     Icon(
                         Icons.Default.Favorite,

@@ -135,6 +135,9 @@ fun FitNutritionApp(healthViewModel: HealthViewModel) {
                     },
                     onNavigateToRecipeDetail = { recipeId ->
                         appState = AppState.RecipeDetail(recipeId)
+                    },
+                    onNavigateToWorkoutAnalytics = {
+                        appState = AppState.WorkoutAnalytics
                     }
                 )
             }
@@ -142,6 +145,12 @@ fun FitNutritionApp(healthViewModel: HealthViewModel) {
                 // Show recipe detail screen
                 RecipeDetailScreen(
                     recipeId = (appState as AppState.RecipeDetail).recipeId,
+                    onBackClick = { appState = AppState.MainApp }
+                )
+            }
+            is AppState.WorkoutAnalytics -> {
+                // Show workout analytics screen
+                WorkoutAnalyticsScreen(
                     onBackClick = { appState = AppState.MainApp }
                 )
             }
@@ -170,7 +179,8 @@ fun AuthNavigation(onAuthSuccess: () -> Unit) {
 fun MainAppScreen(
     healthViewModel: HealthViewModel,
     onNavigateToRecipeDetail: (Int) -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    onNavigateToWorkoutAnalytics : () -> Unit,
 ) {
 
     var currentRoute by remember { mutableStateOf(NavigationItem.Home.route) }
@@ -196,7 +206,8 @@ fun MainAppScreen(
     ) { innerPadding ->
         when (currentScreen) {
             is NavigationItem.Home -> {
-                HomeScreen(padding = Modifier.padding(innerPadding))
+                HomeScreen(padding = Modifier.padding(innerPadding),
+                    onNavigateToWorkoutAnalytics = onNavigateToWorkoutAnalytics)
             }
             is NavigationItem.Nutrition -> {
                 NutritionScreen(padding = Modifier.padding(innerPadding),
@@ -223,4 +234,5 @@ sealed class AppState {
     object Auth : AppState()
     object MainApp : AppState()
     data class RecipeDetail(val recipeId: Int) : AppState()
+    object WorkoutAnalytics : AppState()
 }
