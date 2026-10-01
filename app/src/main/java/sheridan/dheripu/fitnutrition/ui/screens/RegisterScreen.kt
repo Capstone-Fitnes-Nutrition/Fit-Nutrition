@@ -226,6 +226,16 @@ fun RegisterScreen(
                     errorMessage = "Passwords don't match"
                     return@Button
                 }
+
+                if (weight.isNotBlank() && (weight.toDoubleOrNull()?.let { it > 0 } != true)) {
+                    errorMessage = "Weight must be a positive number"
+                    return@Button
+                }
+
+                if (height.isNotBlank() && (height.toDoubleOrNull()?.let { it > 0 } != true)) {
+                    errorMessage = "Height must be a positive number"
+                    return@Button
+                }
                 
                 isLoading = true
                 errorMessage = null
