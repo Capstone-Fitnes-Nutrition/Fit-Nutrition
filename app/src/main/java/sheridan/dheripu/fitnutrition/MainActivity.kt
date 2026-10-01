@@ -138,6 +138,9 @@ fun FitNutritionApp(healthViewModel: HealthViewModel) {
                     },
                     onNavigateToWorkoutAnalytics = {
                         appState = AppState.WorkoutAnalytics
+                    },
+                    onNavigateToNutritionAnalytics = {
+                        appState = AppState.NutritionAnalytics
                     }
                 )
             }
@@ -151,6 +154,11 @@ fun FitNutritionApp(healthViewModel: HealthViewModel) {
             is AppState.WorkoutAnalytics -> {
                 // Show workout analytics screen
                 WorkoutAnalyticsScreen(
+                    onBackClick = { appState = AppState.MainApp }
+                )
+            }
+            is AppState.NutritionAnalytics -> {
+                NutritionAnalyticsScreen(
                     onBackClick = { appState = AppState.MainApp }
                 )
             }
@@ -181,6 +189,7 @@ fun MainAppScreen(
     onNavigateToRecipeDetail: (Int) -> Unit,
     onLogout: () -> Unit,
     onNavigateToWorkoutAnalytics : () -> Unit,
+    onNavigateToNutritionAnalytics: () -> Unit,
 ) {
 
     var currentRoute by remember { mutableStateOf(NavigationItem.Home.route) }
@@ -207,11 +216,16 @@ fun MainAppScreen(
         when (currentScreen) {
             is NavigationItem.Home -> {
                 HomeScreen(padding = Modifier.padding(innerPadding),
-                    onNavigateToWorkoutAnalytics = onNavigateToWorkoutAnalytics)
+                    onNavigateToNutrition = {
+                        currentRoute = NavigationItem.Nutrition.route
+                    },
+                    onNavigateToWorkoutAnalytics = onNavigateToWorkoutAnalytics,
+                    onNavigateToNutritionAnalytics = onNavigateToNutritionAnalytics)
             }
             is NavigationItem.Nutrition -> {
                 NutritionScreen(padding = Modifier.padding(innerPadding),
-                    onRecipeClick = onNavigateToRecipeDetail  )
+                    onRecipeClick = onNavigateToRecipeDetail,
+                    onNavigateToNutritionAnalytics = onNavigateToNutritionAnalytics)
             }
             is NavigationItem.Fitness -> {
                 FitnessScreen(padding = Modifier.padding(innerPadding))
@@ -235,4 +249,5 @@ sealed class AppState {
     object MainApp : AppState()
     data class RecipeDetail(val recipeId: Int) : AppState()
     object WorkoutAnalytics : AppState()
+    object NutritionAnalytics : AppState()
 }

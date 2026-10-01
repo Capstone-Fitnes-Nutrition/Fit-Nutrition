@@ -1,15 +1,10 @@
 package sheridan.dheripu.fitnutrition.ui.screens
 
-import android.annotation.SuppressLint
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -17,7 +12,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -26,6 +20,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import sheridan.dheripu.fitnutrition.data.NutritionViewModel
 import sheridan.dheripu.fitnutrition.data.RecipeViewModel
 import sheridan.dheripu.fitnutrition.model.Ingredient
 import sheridan.dheripu.fitnutrition.model.Recipe
@@ -36,12 +31,15 @@ import kotlin.math.roundToInt
 fun RecipeDetailScreen(
     recipeId: Int,
     onBackClick: () -> Unit,
-    recipeViewModel: RecipeViewModel = viewModel()
+    recipeViewModel: RecipeViewModel = viewModel(),
+    nutritionViewModel: NutritionViewModel = viewModel()
 ) {
     // State variables
     var recipe by remember { mutableStateOf<Recipe?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    val nutritionUiState by nutritionViewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
     
     // Load recipe details when screen opens
     LaunchedEffect(recipeId) {
@@ -59,9 +57,17 @@ fun RecipeDetailScreen(
             isLoading = false
         }
     }
+
+    LaunchedEffect(nutritionUiState.actionMessage) {
+        nutritionUiState.actionMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            nutritionViewModel.clearActionMessage()
+        }
+    }
     
     // Scaffold with TopAppBar
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { 
@@ -133,6 +139,8 @@ fun RecipeDetailScreen(
         else if (recipe != null) {
             RecipeDetailContent(
                 recipe = recipe!!,
+                isLogging = nutritionUiState.isLogging,
+                onLogMeal = { nutritionViewModel.logRecipe(recipe!!) },
                 modifier = Modifier.padding(innerPadding)
             )
         }
@@ -142,6 +150,8 @@ fun RecipeDetailScreen(
 @Composable
 fun RecipeDetailContent(
     recipe: Recipe,
+    isLogging: Boolean,
+    onLogMeal: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -218,23 +228,46 @@ fun RecipeDetailContent(
                 }
             }
         }
+
+        // 3. SAVE MEAL FOR NUTRITION ANALYTICS
+        item {
+            Button(
+                onClick = onLogMeal,
+                enabled = !isLogging,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+            ) {
+                if (isLogging) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Log Meal")
+                }
+            }
+        }
         
-        // 3. NUTRITION FACTS SECTION
+        // 4. NUTRITION FACTS SECTION
         item {
             NutritionSection(recipe)
         }
         
-        // 4. INGREDIENTS SECTION
+        // 5. INGREDIENTS SECTION
         item {
             IngredientsSection(recipe.extendedIngredients)
         }
         
-        // 5. SUMMARY SECTION
+        // 6. SUMMARY SECTION
         item {
             SummarySection(recipe.summary)
         }
         
-        // 6. SOURCE LINK (if available)
+        // 7. SOURCE LINK (if available)
         item {
             recipe.sourceUrl?.let { url ->
                 Card(
@@ -375,7 +408,7 @@ fun NutrientRow(name: String, amount: Double, unit: String) {
             fontWeight = FontWeight.SemiBold
         )
     }
-    Divider(
+    HorizontalDivider(
         modifier = Modifier.padding(vertical = 4.dp),
         thickness = 0.5.dp,
         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
@@ -484,7 +517,7 @@ fun IngredientItem(
         }
         
         if (showDivider) {
-            Divider(
+            HorizontalDivider(
                 modifier = Modifier.padding(vertical = 4.dp),
                 thickness = 0.5.dp,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
