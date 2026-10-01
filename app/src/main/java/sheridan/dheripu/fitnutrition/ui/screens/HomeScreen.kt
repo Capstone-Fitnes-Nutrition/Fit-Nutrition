@@ -18,9 +18,12 @@ import sheridan.dheripu.fitnutrition.ui.components.InfoCard
 @OptIn(ExperimentalMaterial3Api::class)
 fun HomeScreen(
     padding: Modifier,
-    onNavigateToWorkoutAnalytics: () -> Unit) {
+    onNavigateToNutrition: () -> Unit,
+    onNavigateToWorkoutAnalytics: () -> Unit,
+    onNavigateToNutritionAnalytics: () -> Unit
+) {
     Column(
-        modifier = Modifier
+        modifier = padding
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
@@ -98,6 +101,7 @@ fun HomeScreen(
         )
 
         Card(
+            onClick = onNavigateToNutrition,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 8.dp)
@@ -146,6 +150,27 @@ fun HomeScreen(
         ) {
             ListItem(
                 headlineContent = { Text("View Workout Analytics") },
+                leadingContent = {
+                    Icon(
+                        Icons.Default.Favorite,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                },
+                trailingContent = {
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
+                }
+            )
+        }
+
+        Card(
+            onClick = onNavigateToNutritionAnalytics,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp)
+        ) {
+            ListItem(
+                headlineContent = { Text("View Nutrition Analytics") },
                 leadingContent = {
                     Icon(
                         Icons.Default.Favorite,

@@ -41,7 +41,8 @@ fun NutritionScreen(
     modifier: Modifier = Modifier,
     onRecipeClick: (Int) -> Unit,
     recipeViewModel: RecipeViewModel = viewModel(),
-    padding: Modifier
+    padding: Modifier,
+    onNavigateToNutritionAnalytics: () -> Unit
 ) {
     val recipes by recipeViewModel.recipes.collectAsState()
     val isLoading by recipeViewModel.isLoading.collectAsState()
@@ -54,12 +55,25 @@ fun NutritionScreen(
     }
 
     Column(
-        modifier = modifier.fillMaxSize()
+        modifier = modifier
+            .then(padding)
+            .fillMaxSize()
     ) {
         ScreenHeader(
             title = "Nutrition & Recipes",
             subtitle = "Find healthy meals based on your preferences"
         )
+
+        OutlinedButton(
+            onClick = onNavigateToNutritionAnalytics,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+        ) {
+            Icon(Icons.Default.Insights, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("View Nutrition Analytics")
+        }
 
         // Search and Filters Section
         RecipeFiltersSection(
