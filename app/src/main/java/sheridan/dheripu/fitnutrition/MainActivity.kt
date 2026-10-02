@@ -225,10 +225,14 @@ fun MainAppScreen(
             is NavigationItem.Nutrition -> {
                 NutritionScreen(padding = Modifier.padding(innerPadding),
                     onRecipeClick = onNavigateToRecipeDetail,
-                    onNavigateToNutritionAnalytics = onNavigateToNutritionAnalytics)
+                    onNavigateToNutritionAnalytics = onNavigateToNutritionAnalytics,
+                    onNavigateToProfile = { currentRoute = NavigationItem.Profile.route })
             }
             is NavigationItem.Fitness -> {
-                FitnessScreen(padding = Modifier.padding(innerPadding))
+                FitnessScreen(
+                    padding = Modifier.padding(innerPadding),
+                    onNavigateToProfile = { currentRoute = NavigationItem.Profile.route }
+                )
             }
             is NavigationItem.Health -> {
                 WearableScreen(padding = Modifier.padding(innerPadding))

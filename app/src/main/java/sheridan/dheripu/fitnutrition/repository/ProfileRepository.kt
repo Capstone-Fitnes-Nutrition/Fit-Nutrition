@@ -45,6 +45,12 @@ class ProfileRepository(
             "weight" to profile.weight,
             "height" to profile.height,
             "fitnessGoal" to profile.fitnessGoal,
+            "activityLevel" to profile.activityLevel,
+            "dailyCalorieTarget" to profile.dailyCalorieTarget,
+            "dailyProteinTarget" to profile.dailyProteinTarget,
+            "dietaryPreference" to profile.dietaryPreference,
+            "dietaryRestrictions" to profile.dietaryRestrictions,
+            "availableEquipment" to profile.availableEquipment,
             "updatedAt" to FieldValue.serverTimestamp()
         )
 

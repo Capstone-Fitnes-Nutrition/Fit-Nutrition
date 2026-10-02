@@ -25,7 +25,14 @@ class FitnessViewModel : ViewModel() {
         workoutRepository.getWorkouts(
             userId = uid,
             onSuccess = {myWorkouts.value = it},
-            onError = {errorMessage = it}
+            onError = { message ->
+                errorMessage = if (message.contains("PERMISSION_DENIED", ignoreCase = true)) {
+                    "Saved workout history isn't accessible for this account. " +
+                        "Check Firestore rules for users/{uid}/workouts."
+                } else {
+                    message
+                }
+            }
         )
     }
 

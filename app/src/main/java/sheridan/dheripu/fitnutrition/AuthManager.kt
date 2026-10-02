@@ -45,9 +45,14 @@ object AuthManager {
     ) {
         auth.createUserWithEmailAndPassword(email, password)
             .addOnCompleteListener { task ->
-                val firebaseUser = task.result?.user
-                if (!task.isSuccessful || firebaseUser == null) {
+                if (!task.isSuccessful) {
                     onResult(false, task.exception?.message ?: "Unable to create account")
+                    return@addOnCompleteListener
+                }
+
+                val firebaseUser = task.result?.user
+                if (firebaseUser == null) {
+                    onResult(false, "Account was created, but user details could not be loaded")
                     return@addOnCompleteListener
                 }
 

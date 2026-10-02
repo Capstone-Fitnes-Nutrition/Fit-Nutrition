@@ -76,7 +76,9 @@ class ProfileViewModel(
         activityLevel: String,
         dailyCalorieTarget: String,
         dailyProteinTarget: String,
-        dietaryPreference: String
+        dietaryPreference: String,
+        dietaryRestrictions: String,
+        availableEquipment: String
     ) {
         val firebaseUser = AuthManager.currentUser
         if (firebaseUser == null) {
@@ -104,7 +106,13 @@ class ProfileViewModel(
             name = name.trim(),
             weight = weight.trim(),
             height = height.trim(),
-            fitnessGoal = fitnessGoal,
+            fitnessGoal = fitnessGoal.trim(),
+            activityLevel = activityLevel.trim(),
+            dailyCalorieTarget = dailyCalorieTarget.trim(),
+            dailyProteinTarget = dailyProteinTarget.trim(),
+            dietaryPreference = dietaryPreference.trim(),
+            dietaryRestrictions = dietaryRestrictions.split(",").map(String::trim).filter(String::isNotBlank),
+            availableEquipment = availableEquipment.split(",").map(String::trim).filter(String::isNotBlank)
         )
 
         _uiState.value = _uiState.value.copy(

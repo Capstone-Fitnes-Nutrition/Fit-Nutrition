@@ -36,16 +36,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import sheridan.dheripu.fitnutrition.AuthManager
 import sheridan.dheripu.fitnutrition.data.FitnessViewModel
 import sheridan.dheripu.fitnutrition.model.Exercise
 import sheridan.dheripu.fitnutrition.model.WorkoutItem
+import sheridan.dheripu.fitnutrition.repository.RecommendationContextRepository
 import sheridan.dheripu.fitnutrition.ui.components.ScreenHeader
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FitnessScreen(
     padding: Modifier = Modifier,
-    viewModel: FitnessViewModel = viewModel()
+    viewModel: FitnessViewModel = viewModel(),
+    onNavigateToProfile: () -> Unit
 ) {
     var searchString by remember { mutableStateOf("") }
     val exercises = viewModel.exercises.value
@@ -57,6 +60,8 @@ fun FitnessScreen(
     var repsInput by remember { mutableStateOf("") }
     var timeInput by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf("") }
+    var workoutRecommendation by remember { mutableStateOf<String?>(null) }
+    var needsFitnessProfile by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -66,6 +71,29 @@ fun FitnessScreen(
         ScreenHeader(
             title = "Fitness",
             subtitle = "Workout plans and tracking"
+        )
+
+        RecommendationCard(
+            title = "Workout recommendation",
+            recommendation = workoutRecommendation,
+            needsProfile = needsFitnessProfile,
+            onNavigateToProfile = onNavigateToProfile,
+            onGenerate = {
+                needsFitnessProfile = false
+                val userId = AuthManager.currentUser?.uid
+                if (userId == null) {
+                    workoutRecommendation = "Sign in to prepare a personalized sample request."
+                } else {
+                    RecommendationContextRepository().prepareWorkout(
+                        userId = userId,
+                        onPrepared = { result ->
+                            workoutRecommendation = RecommendationDemoFormatter.workout(result)
+                            needsFitnessProfile = result is sheridan.dheripu.fitnutrition.model.ContextPreparation.NeedsProfile
+                        },
+                        onError = { message -> workoutRecommendation = message }
+                    )
+                }
+            }
         )
 
         Row(

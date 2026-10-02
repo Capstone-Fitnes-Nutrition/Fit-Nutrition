@@ -30,9 +30,11 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import sheridan.dheripu.fitnutrition.AuthManager
 import sheridan.dheripu.fitnutrition.data.RecipeViewModel
 import sheridan.dheripu.fitnutrition.model.Recipe
 import sheridan.dheripu.fitnutrition.model.RecipeFilters
+import sheridan.dheripu.fitnutrition.repository.RecommendationContextRepository
 import sheridan.dheripu.fitnutrition.ui.components.ScreenHeader
 
 
@@ -42,12 +44,15 @@ fun NutritionScreen(
     onRecipeClick: (Int) -> Unit,
     recipeViewModel: RecipeViewModel = viewModel(),
     padding: Modifier,
-    onNavigateToNutritionAnalytics: () -> Unit
+    onNavigateToNutritionAnalytics: () -> Unit,
+    onNavigateToProfile: () -> Unit
 ) {
     val recipes by recipeViewModel.recipes.collectAsState()
     val isLoading by recipeViewModel.isLoading.collectAsState()
     val errorMessage by recipeViewModel.errorMessage.collectAsState()
     val filters by recipeViewModel.currentFilters.collectAsState()
+    var mealRecommendation by remember { mutableStateOf<String?>(null) }
+    var needsNutritionProfile by remember { mutableStateOf(false) }
 
     // Load recipes on first launch
     LaunchedEffect(Unit) {
@@ -74,6 +79,29 @@ fun NutritionScreen(
             Spacer(modifier = Modifier.width(8.dp))
             Text("View Nutrition Analytics")
         }
+
+        RecommendationCard(
+            title = "Meal recommendation",
+            recommendation = mealRecommendation,
+            needsProfile = needsNutritionProfile,
+            onNavigateToProfile = onNavigateToProfile,
+            onGenerate = {
+                needsNutritionProfile = false
+                val userId = AuthManager.currentUser?.uid
+                if (userId == null) {
+                    mealRecommendation = "Sign in to prepare a personalized sample request."
+                } else {
+                    RecommendationContextRepository().prepareMeal(
+                        userId = userId,
+                        onPrepared = { result ->
+                            mealRecommendation = RecommendationDemoFormatter.meal(result)
+                            needsNutritionProfile = result is sheridan.dheripu.fitnutrition.model.ContextPreparation.NeedsProfile
+                        },
+                        onError = { message -> mealRecommendation = message }
+                    )
+                }
+            }
+        )
 
         // Search and Filters Section
         RecipeFiltersSection(

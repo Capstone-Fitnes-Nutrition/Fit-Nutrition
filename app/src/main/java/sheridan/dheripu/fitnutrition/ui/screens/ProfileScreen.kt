@@ -70,12 +70,21 @@ fun ProfileScreen(
     var calorieTarget by rememberSaveable { mutableStateOf("") }
     var proteinTarget by rememberSaveable { mutableStateOf("") }
     var dietaryPreference by rememberSaveable { mutableStateOf(dietaryPreferences.first()) }
+    var dietaryRestrictions by rememberSaveable { mutableStateOf("") }
+    var availableEquipment by rememberSaveable { mutableStateOf("") }
 
     fun populateForm(profile: User?) {
         name = profile?.name.orEmpty()
         weight = profile?.weight.orEmpty()
         height = profile?.height.orEmpty()
         fitnessGoal = profile?.fitnessGoal?.takeIf { it in fitnessGoals } ?: fitnessGoals.first()
+        activityLevel = profile?.activityLevel?.takeIf { it in activityLevels } ?: activityLevels.first()
+        calorieTarget = profile?.dailyCalorieTarget.orEmpty()
+        proteinTarget = profile?.dailyProteinTarget.orEmpty()
+        dietaryPreference = profile?.dietaryPreference?.takeIf { it in dietaryPreferences }
+            ?: dietaryPreferences.first()
+        dietaryRestrictions = profile?.dietaryRestrictions.orEmpty().joinToString(", ")
+        availableEquipment = profile?.availableEquipment.orEmpty().joinToString(", ")
     }
 
     LaunchedEffect(currentUser?.uid) {
@@ -137,6 +146,10 @@ fun ProfileScreen(
                     onProteinTargetChange = { proteinTarget = it },
                     dietaryPreference = dietaryPreference,
                     onDietaryPreferenceChange = { dietaryPreference = it },
+                    dietaryRestrictions = dietaryRestrictions,
+                    onDietaryRestrictionsChange = { dietaryRestrictions = it },
+                    availableEquipment = availableEquipment,
+                    onAvailableEquipmentChange = { availableEquipment = it },
                     isSaving = uiState.isSaving,
                     onCancel = {
                         populateForm(uiState.profile)
@@ -151,7 +164,9 @@ fun ProfileScreen(
                             activityLevel = activityLevel,
                             dailyCalorieTarget = calorieTarget,
                             dailyProteinTarget = proteinTarget,
-                            dietaryPreference = dietaryPreference
+                            dietaryPreference = dietaryPreference,
+                            dietaryRestrictions = dietaryRestrictions,
+                            availableEquipment = availableEquipment
                         )
                     }
                 )
@@ -307,6 +322,10 @@ private fun ProfileEditor(
     onProteinTargetChange: (String) -> Unit,
     dietaryPreference: String,
     onDietaryPreferenceChange: (String) -> Unit,
+    dietaryRestrictions: String,
+    onDietaryRestrictionsChange: (String) -> Unit,
+    availableEquipment: String,
+    onAvailableEquipmentChange: (String) -> Unit,
     isSaving: Boolean,
     onCancel: () -> Unit,
     onSave: () -> Unit
@@ -406,6 +425,20 @@ private fun ProfileEditor(
                 value = dietaryPreference,
                 options = dietaryPreferences,
                 onSelected = onDietaryPreferenceChange
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedTextField(
+                value = dietaryRestrictions,
+                onValueChange = onDietaryRestrictionsChange,
+                label = { Text("Dietary restrictions (comma separated)") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedTextField(
+                value = availableEquipment,
+                onValueChange = onAvailableEquipmentChange,
+                label = { Text("Available workout equipment (comma separated)") },
+                modifier = Modifier.fillMaxWidth()
             )
 
             Spacer(modifier = Modifier.height(24.dp))
