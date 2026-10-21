@@ -32,6 +32,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import sheridan.dheripu.fitnutrition.AuthManager
 import sheridan.dheripu.fitnutrition.data.RecipeViewModel
+import sheridan.dheripu.fitnutrition.model.ContextPreparation
 import sheridan.dheripu.fitnutrition.model.Recipe
 import sheridan.dheripu.fitnutrition.model.RecipeFilters
 import sheridan.dheripu.fitnutrition.repository.RecommendationContextRepository
@@ -95,7 +96,7 @@ fun NutritionScreen(
                         userId = userId,
                         onPrepared = { result ->
                             mealRecommendation = RecommendationDemoFormatter.meal(result)
-                            needsNutritionProfile = result is sheridan.dheripu.fitnutrition.model.ContextPreparation.NeedsProfile
+                            needsNutritionProfile = result is ContextPreparation.NeedsProfile
                         },
                         onError = { message -> mealRecommendation = message }
                     )

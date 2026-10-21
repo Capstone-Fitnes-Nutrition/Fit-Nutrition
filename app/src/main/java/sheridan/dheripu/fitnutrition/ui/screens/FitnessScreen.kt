@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import sheridan.dheripu.fitnutrition.AuthManager
 import sheridan.dheripu.fitnutrition.data.FitnessViewModel
+import sheridan.dheripu.fitnutrition.model.ContextPreparation
 import sheridan.dheripu.fitnutrition.model.Exercise
 import sheridan.dheripu.fitnutrition.model.WorkoutItem
 import sheridan.dheripu.fitnutrition.repository.RecommendationContextRepository
@@ -88,7 +89,7 @@ fun FitnessScreen(
                         userId = userId,
                         onPrepared = { result ->
                             workoutRecommendation = RecommendationDemoFormatter.workout(result)
-                            needsFitnessProfile = result is sheridan.dheripu.fitnutrition.model.ContextPreparation.NeedsProfile
+                            needsFitnessProfile = result is ContextPreparation.NeedsProfile
                         },
                         onError = { message -> workoutRecommendation = message }
                     )
