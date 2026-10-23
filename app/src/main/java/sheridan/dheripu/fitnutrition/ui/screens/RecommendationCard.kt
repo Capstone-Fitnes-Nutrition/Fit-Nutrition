@@ -100,7 +100,8 @@ private fun RecommendationBody(
         )
         is RecommendationUiState.Workout -> SuggestionList(
             rows = state.items.map {
-                SuggestionRow(it.recommendationId, it.item.exercise.name.replaceFirstChar(Char::uppercase),
+                SuggestionRow(it.recommendationId,
+                    it.item.exercise.name.replaceFirstChar(Char::uppercase),
                     RecommendationText.summary(it.item), it.reasons,
                     it.recommendationId in state.handledIds)
             },
@@ -122,9 +123,14 @@ private fun SuggestionList(
     onAccept: (String) -> Unit,
     onDismiss: (String) -> Unit
 ) {
-    Column(modifier = Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(
+        modifier = Modifier.padding(top = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
         note?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-        notice?.let { Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold) }
+        notice?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+        }
         rows.forEach { row ->
             HorizontalDivider()
             SuggestionItem(row, acceptLabel, onAccept, onDismiss)

@@ -133,7 +133,8 @@ class WorkoutRecommendationEngine(
 
 /** Chooses which body parts to fetch exercises for, favouring rested muscle groups. */
 object WorkoutTargetPlanner {
-    private val muscleGroups = listOf("chest", "back", "upper legs", "shoulders", "upper arms", "waist")
+    private val muscleGroups =
+        listOf("chest", "back", "upper legs", "shoulders", "upper arms", "waist")
     private const val TARGET_COUNT = 3
 
     fun bodyPartsFor(context: WorkoutRecommendationContext): List<String> {

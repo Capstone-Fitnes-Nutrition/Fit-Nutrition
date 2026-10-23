@@ -64,8 +64,7 @@ class MealRecommendationEngine(
             .map(::normalizeTag)
             .distinct()
         val features = mapOf(
-            CALORIE_FIT to (1.0 - abs(pick.calories - targets.calories).toDouble() / targets.calories)
-                .coerceAtLeast(0.0),
+            CALORIE_FIT to calorieFit(pick.calories, targets.calories),
             PROTEIN_FIT to (pick.proteinGrams / targets.proteinGrams).coerceAtMost(1.0),
             NOVELTY to novelty(context, recipe, nowMillis),
             LEARNED_AFFINITY to preferences.affinityFor(tags)
@@ -93,7 +92,14 @@ class MealRecommendationEngine(
         )
     }
 
-    private fun novelty(context: MealRecommendationContext, recipe: Recipe, nowMillis: Long): Double {
+    private fun calorieFit(calories: Int, target: Int): Double =
+        (1.0 - abs(calories - target).toDouble() / target).coerceAtLeast(0.0)
+
+    private fun novelty(
+        context: MealRecommendationContext,
+        recipe: Recipe,
+        nowMillis: Long
+    ): Double {
         val lastEaten = context.recentMeals
             .filter { it.name.equals(recipe.title, ignoreCase = true) }
             .maxOfOrNull { it.loggedAtEpochMillis } ?: return 1.0
@@ -119,7 +125,10 @@ class MealRecommendationEngine(
             add("About ${pick.calories} kcal, close to your ${targets.calories} kcal meal target")
         }
         if ((features[PROTEIN_FIT] ?: 0.0) >= 0.8) {
-            add("${pick.proteinGrams.toInt()} g protein toward your ${targets.dailyProteinGrams} g daily target")
+            add(
+                "${pick.proteinGrams.toInt()} g protein toward your " +
+                    "${targets.dailyProteinGrams} g daily target"
+            )
         }
         if (hasHistory && features[NOVELTY] == 1.0) add("Something you haven't eaten recently")
     }.take(MAX_REASONS)
@@ -134,7 +143,12 @@ class MealRecommendationEngine(
         const val LEARNED_AFFINITY = "learnedAffinity"
 
         val DEFAULT_WEIGHTS = ScoringWeights(
-            mapOf(CALORIE_FIT to 0.35, PROTEIN_FIT to 0.25, NOVELTY to 0.15, LEARNED_AFFINITY to 0.25)
+            mapOf(
+                CALORIE_FIT to 0.35,
+                PROTEIN_FIT to 0.25,
+                NOVELTY to 0.15,
+                LEARNED_AFFINITY to 0.25
+            )
         )
 
         private const val MAX_RESULTS = 3

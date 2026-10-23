@@ -153,7 +153,8 @@ class RecommendationViewModel(
             if (logged) {
                 attempt {
                     dataSource.recordFeedback(
-                        userId, listOf(event(pick, RecommendationType.MEAL, FeedbackAction.ACCEPTED))
+                        userId,
+                        listOf(event(pick, RecommendationType.MEAL, FeedbackAction.ACCEPTED))
                     )
                 }
             }

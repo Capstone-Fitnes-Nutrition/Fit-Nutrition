@@ -16,7 +16,7 @@ internal object MealRules {
     )
 
     /** BR2: a recipe must not contain anything the user is allergic to or avoids. */
-    val respectsRestrictions = CandidateFilter<MealRecommendationContext, Recipe> { context, recipe ->
+    val respectsRestrictions = MealFilter { context, recipe ->
         val text = (listOf(recipe.title) + recipe.extendedIngredients.map { it.name })
             .joinToString(" ")
             .lowercase()
@@ -27,7 +27,7 @@ internal object MealRules {
     }
 
     /** BR2: a recipe must fit the user's dietary preference. Unknown preferences pass. */
-    val matchesPreference = CandidateFilter<MealRecommendationContext, Recipe> { context, recipe ->
+    val matchesPreference = MealFilter { context, recipe ->
         val diets = recipe.diets.map { it.lowercase() }
         fun hasAny(vararg labels: String) = diets.any { diet -> labels.any { diet.contains(it) } }
         when (context.dietaryPreference.orEmpty().lowercase().replace("-", " ").trim()) {
@@ -40,7 +40,7 @@ internal object MealRules {
     }
 
     /** Recipes without calorie data cannot be portioned, so they are skipped. */
-    val hasNutrition = CandidateFilter<MealRecommendationContext, Recipe> { _, recipe ->
+    val hasNutrition = MealFilter { _, recipe ->
         (recipe.caloriesPerServing() ?: 0.0) > 0.0
     }
 
@@ -64,7 +64,9 @@ internal object MealRules {
         }
         val today = Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate()
         val eatenToday = context.recentMeals
-            .filter { Instant.ofEpochMilli(it.loggedAtEpochMillis).atZone(zone).toLocalDate() == today }
+            .filter {
+                Instant.ofEpochMilli(it.loggedAtEpochMillis).atZone(zone).toLocalDate() == today
+            }
             .sumOf { it.calories }
         val perMeal = dailyCalories / MEALS_PER_DAY
         val remaining = dailyCalories - eatenToday
@@ -86,6 +88,8 @@ internal object MealRules {
     private const val MIN_SERVINGS = 0.5
     private const val MAX_SERVINGS = 2.0
 }
+
+private typealias MealFilter = CandidateFilter<MealRecommendationContext, Recipe>
 
 internal data class MealTargets(
     val calories: Int,

@@ -53,7 +53,9 @@ object PreferenceLearner {
             }
         }
         return UserPreferenceProfile(
-            affinities = totals.mapValues { (_, value) -> value.first / (value.second + PRIOR_EVENTS) },
+            affinities = totals.mapValues { (_, value) ->
+                value.first / (value.second + PRIOR_EVENTS)
+            },
             dismissedItemIds = events.filter { it.action == FeedbackAction.DISMISSED }
                 .map { it.itemId }
                 .toSet()

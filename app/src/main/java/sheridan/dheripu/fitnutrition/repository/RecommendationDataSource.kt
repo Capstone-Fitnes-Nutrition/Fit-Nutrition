@@ -17,7 +17,8 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 typealias MealPreparation = ContextPreparation<RecommendationRequest<MealRecommendationContext>>
-typealias WorkoutPreparation = ContextPreparation<RecommendationRequest<WorkoutRecommendationContext>>
+typealias WorkoutPreparation =
+    ContextPreparation<RecommendationRequest<WorkoutRecommendationContext>>
 
 /**
  * Everything the recommendation flow reads or writes. Failures are thrown as exceptions so
@@ -41,11 +42,13 @@ class RecommendationDataException(message: String) : Exception(message)
 
 /** Adapts the callback-based repositories to [RecommendationDataSource]. */
 class FirebaseRecommendationDataSource(
-    private val contextRepository: RecommendationContextRepository = RecommendationContextRepository(),
+    private val contextRepository: RecommendationContextRepository =
+        RecommendationContextRepository(),
     private val recipeRepository: RecipeRepository = RecipeRepository(),
     private val fitnessRepository: FitnessRepository = FitnessRepository(),
     private val healthRepository: HealthRepository = HealthRepository(),
-    private val feedbackRepository: RecommendationFeedbackRepository = RecommendationFeedbackRepository(),
+    private val feedbackRepository: RecommendationFeedbackRepository =
+        RecommendationFeedbackRepository(),
     private val nutritionRepository: NutritionRepository = NutritionRepository(),
     private val workoutRepository: WorkoutRepository = WorkoutRepository()
 ) : RecommendationDataSource {
@@ -54,9 +57,8 @@ class FirebaseRecommendationDataSource(
         contextRepository.prepareMeal(userId, done, fail)
     }
 
-    override suspend fun workoutContext(userId: String): WorkoutPreparation = callback { done, fail ->
-        contextRepository.prepareWorkout(userId, done, fail)
-    }
+    override suspend fun workoutContext(userId: String): WorkoutPreparation =
+        callback { done, fail -> contextRepository.prepareWorkout(userId, done, fail) }
 
     override suspend fun recipeCandidates(filters: RecipeFilters): List<Recipe> =
         recipeRepository.searchRecipes(filters)

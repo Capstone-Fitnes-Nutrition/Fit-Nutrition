@@ -23,7 +23,7 @@ internal object WorkoutRules {
     private const val ADVANCED_PREREQUISITE_WORKOUTS = 5
     private const val INTERMEDIATE_PREREQUISITE_WORKOUTS = 3
 
-    val hasEquipment = CandidateFilter<WorkoutRecommendationContext, Exercise> { context, exercise ->
+    val hasEquipment = WorkoutFilter { context, exercise ->
         val owned = context.availableEquipment.map(::singular)
         val needed = exercise.equipment.lowercase()
         needed.isBlank() || needed == "body weight" ||
@@ -32,7 +32,7 @@ internal object WorkoutRules {
     }
 
     /** BR9 beginners see beginner exercises; BR8 harder ones unlock after completed workouts. */
-    val withinLevel = CandidateFilter<WorkoutRecommendationContext, Exercise> { context, exercise ->
+    val withinLevel = WorkoutFilter { context, exercise ->
         difficultyOf(exercise) <= maxDifficulty(context)
     }
 
@@ -81,7 +81,10 @@ internal object WorkoutRules {
         }
     }
 
-    fun lastSessionOf(context: WorkoutRecommendationContext, exercise: Exercise): WorkoutHistoryItem? =
+    fun lastSessionOf(
+        context: WorkoutRecommendationContext,
+        exercise: Exercise
+    ): WorkoutHistoryItem? =
         context.recentWorkouts
             .filter { it.exerciseName.equals(exercise.name, ignoreCase = true) }
             .maxByOrNull { it.completedAtEpochMillis }
@@ -113,5 +116,7 @@ internal object WorkoutRules {
 
     private const val MAX_EXTRA_REPS = 4
 }
+
+private typealias WorkoutFilter = CandidateFilter<WorkoutRecommendationContext, Exercise>
 
 internal fun Exercise.isCardio(): Boolean = bodyPart.equals("cardio", ignoreCase = true)

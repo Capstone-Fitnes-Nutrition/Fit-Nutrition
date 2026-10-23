@@ -13,7 +13,8 @@ data class ScoringWeights(val weights: Map<String, Double>) {
     fun combine(features: Map<String, Double>): ScoreBreakdown {
         val totalWeight = weights.values.sum()
         val total = if (totalWeight == 0.0) 0.0 else
-            weights.entries.sumOf { (name, weight) -> weight * (features[name] ?: 0.0) } / totalWeight
+            weights.entries.sumOf { (name, weight) -> weight * (features[name] ?: 0.0) } /
+                totalWeight
         return ScoreBreakdown(total, features)
     }
 }
