@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import sheridan.dheripu.fitnutrition.data.HealthViewModel
 
@@ -28,6 +29,8 @@ fun WearableScreen(padding: Modifier = Modifier) {
     val healthMetrics by viewModel.healthMetrics.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
+    val alerts by viewModel.alerts.collectAsStateWithLifecycle()
+    val weeklyMetrics by viewModel.weeklyMetrics.collectAsStateWithLifecycle()
 
     // Check authentication on first load
     LaunchedEffect(Unit) {
@@ -114,6 +117,10 @@ fun WearableScreen(padding: Modifier = Modifier) {
             }
         }
 
+        if (alerts.isNotEmpty()) {
+            HealthAlertsSection(alerts)
+        }
+
         // Authentication Section
         if (!isAuthenticated) {
             LoginSection(
@@ -140,6 +147,7 @@ fun WearableScreen(padding: Modifier = Modifier) {
                     )
                 }
             }
+            WeeklyTrendsSection(weeklyMetrics)
         }
     }
 }
@@ -302,6 +310,13 @@ private fun HealthMetricsSection(
                 modifier = Modifier.weight(1f)
             )
         }
+
+        MetricCard(
+            title = "Sleep",
+            value = HealthText.sleep(metrics.sleepMinutes),
+            icon = "😴",
+            modifier = Modifier.fillMaxWidth()
+        )
 
         // Last Sync Info
         Card(

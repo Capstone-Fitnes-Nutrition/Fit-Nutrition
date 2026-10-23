@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.util.Base64
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import sheridan.dheripu.fitnutrition.BuildConfig
 import sheridan.dheripu.fitnutrition.model.FitbitAuthResponse
 import sheridan.dheripu.fitnutrition.model.HealthMetrics
@@ -329,6 +330,49 @@ class FitbitService(private val context: Context) {
             Log.e(TAG, "❌ SLEEP FETCH EXCEPTION!", e)
             Log.d(TAG, "========== FETCH SLEEP DATA END ==========")
             Result.failure(Exception("Network error fetching sleep: ${e.message}", e))
+        }
+    }
+
+    /**
+     * True when tokens are stored, even if the access token has expired; the refresh token
+     * can still renew the session.
+     */
+    fun hasStoredSession(): Boolean =
+        getAccessToken() != null && prefs.getString(KEY_REFRESH_TOKEN, null) != null
+
+    /**
+     * Renews the access token when it has expired. Fitbit refresh tokens are single use, so
+     * the new pair replaces the stored one.
+     */
+    suspend fun ensureFreshToken(): Result<Unit> {
+        if (isUserAuthenticated()) return Result.success(Unit)
+        val refreshToken = prefs.getString(KEY_REFRESH_TOKEN, null)
+            ?: return Result.failure(Exception("Unauthorized: Please login again"))
+
+        return try {
+            val response = api.refreshAccessToken(
+                basicAuth = getBasicAuthHeader(),
+                grantType = "refresh_token",
+                refreshToken = refreshToken
+            )
+            val authResponse = response.body()
+            if (response.isSuccessful && authResponse != null) {
+                saveTokens(
+                    accessToken = authResponse.accessToken,
+                    refreshToken = authResponse.refreshToken,
+                    userId = authResponse.userId,
+                    expiresIn = authResponse.expiresIn
+                )
+                Log.d(TAG, "Access token refreshed")
+                Result.success(Unit)
+            } else {
+                handleApiError(response.code(), "Failed to refresh Fitbit session")
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "Token refresh failed", e)
+            Result.failure(Exception("Network error refreshing session: ${e.message}", e))
         }
     }
 

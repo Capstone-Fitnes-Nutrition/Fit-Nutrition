@@ -5,16 +5,25 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import sheridan.dheripu.fitnutrition.model.HealthMetrics
+import sheridan.dheripu.fitnutrition.model.health.ActivityLevel
+import sheridan.dheripu.fitnutrition.model.health.HealthAlert
+import sheridan.dheripu.fitnutrition.model.health.HealthAlertEvaluator
+import sheridan.dheripu.fitnutrition.repository.HealthRepository
 import java.text.SimpleDateFormat
 import java.util.*
 
 class HealthViewModel(application: Application) : AndroidViewModel(application) {
 
     private val fitbitService = FitbitService(application.applicationContext)
+    private val healthRepository = HealthRepository()
 
     // State flows for UI
     private val _isAuthenticated = MutableStateFlow(false)
@@ -22,6 +31,15 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
     private val _healthMetrics = MutableStateFlow<HealthMetrics?>(null)
     val healthMetrics: StateFlow<HealthMetrics?> = _healthMetrics.asStateFlow()
+
+    private val _weeklyMetrics = MutableStateFlow<List<HealthMetrics>>(emptyList())
+    val weeklyMetrics: StateFlow<List<HealthMetrics>> = _weeklyMetrics.asStateFlow()
+
+    /** BR4 and BR5 alerts, recomputed whenever today's or the week's metrics change. */
+    val alerts: StateFlow<List<HealthAlert>> =
+        combine(_healthMetrics, _weeklyMetrics) { today, week ->
+            HealthAlertEvaluator.evaluate(today, week)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), emptyList())
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -31,82 +49,61 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
     companion object {
         private const val TAG = "HealthViewModel"
+        private const val STOP_TIMEOUT_MILLIS = 5_000L
     }
 
     init {
         Log.d(TAG, "HealthViewModel initialized")
+        observeWeeklyHistory()
         checkAuthentication()
     }
 
     /**
-     * Check if user is authenticated with Fitbit
+     * Check if user is connected to Fitbit. An expired access token still counts when a
+     * refresh token is stored, because the next sync renews it.
      */
     fun checkAuthentication() {
-        val isAuth = fitbitService.isUserAuthenticated()
+        val isAuth = fitbitService.isUserAuthenticated() || fitbitService.hasStoredSession()
         _isAuthenticated.value = isAuth
         Log.d(TAG, "checkAuthentication: isAuthenticated = $isAuth")
 
-        if (isAuth) {
-            Log.d(TAG, "User is authenticated, fetching metrics automatically")
-            fetchHealthMetrics()
-        } else {
-            Log.d(TAG, "User is NOT authenticated")
-        }
+        if (isAuth) fetchHealthMetrics()
     }
 
     /**
      * Get Fitbit OAuth authorization URL
      */
-    fun getAuthorizationUrl(): String {
-        val url = fitbitService.generateAuthorizationUrl()
-        Log.d(TAG, "Generated authorization URL: $url")
-        return url
-    }
+    fun getAuthorizationUrl(): String = fitbitService.generateAuthorizationUrl()
 
     /**
      * Handle OAuth callback with authorization code
      * IMPORTANT: This must be called from your MainActivity or deep link handler
      */
     fun handleAuthorizationCode(code: String) {
-        Log.d(TAG, "handleAuthorizationCode called with code: ${code.take(10)}...")
-
         viewModelScope.launch {
             _isLoading.value = true
             _errorMessage.value = null
 
-            Log.d(TAG, "Exchanging authorization code for access token...")
-            val result = fitbitService.exchangeCodeForToken(code)
-
-            result.onSuccess { authResponse ->
-                Log.d(TAG, "✅ Token exchange SUCCESS!")
-                Log.d(TAG, "User ID: ${authResponse.userId}")
-                Log.d(TAG, "Token expires in: ${authResponse.expiresIn} seconds")
-
-                _isAuthenticated.value = true
-                _errorMessage.value = "Login successful! Fetching your data..."
-
-                // Automatically fetch metrics after successful login
-                Log.d(TAG, "Auto-fetching health metrics after login...")
-                fetchHealthMetrics()
-
-            }.onFailure { exception ->
-                Log.e(TAG, "❌ Token exchange FAILED: ${exception.message}", exception)
-                _errorMessage.value = "Login failed: ${exception.message}"
-                _isAuthenticated.value = false
-            }
+            fitbitService.exchangeCodeForToken(code)
+                .onSuccess {
+                    _isAuthenticated.value = true
+                    _errorMessage.value = "Login successful! Fetching your data..."
+                    fetchHealthMetrics()
+                }.onFailure { exception ->
+                    Log.e(TAG, "Token exchange failed: ${exception.message}", exception)
+                    _errorMessage.value = "Login failed: ${exception.message}"
+                    _isAuthenticated.value = false
+                }
 
             _isLoading.value = false
         }
     }
 
     /**
-     * Fetch all health metrics from Fitbit
+     * Sync today's activity, heart rate and sleep from Fitbit, then save the day to history.
      */
     fun fetchHealthMetrics() {
-        Log.d(TAG, "fetchHealthMetrics called")
-
         if (!_isAuthenticated.value) {
-            Log.w(TAG, "Cannot fetch metrics - user not authenticated")
             _errorMessage.value = "Please login to Fitbit first"
             return
         }
@@ -114,105 +111,92 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             _isLoading.value = true
             _errorMessage.value = null
-            Log.d(TAG, "Starting health metrics fetch...")
-
             try {
-                // Fetch activity data (steps, distance, calories, active minutes)
-                Log.d(TAG, "Fetching daily activity data...")
-                val activityResult = fitbitService.fetchDailyActivity()
-
-                activityResult.onSuccess { activityMetrics ->
-                    Log.d(TAG, "✅ Activity data received:")
-                    Log.d(TAG, "  Steps: ${activityMetrics.steps}")
-                    Log.d(TAG, "  Distance: ${activityMetrics.distance} km")
-                    Log.d(TAG, "  Calories: ${activityMetrics.calories}")
-                    Log.d(TAG, "  Active Minutes: ${activityMetrics.activeMinutes}")
-
-                    // Fetch heart rate data
-                    Log.d(TAG, "Fetching heart rate data...")
-                    val heartRateResult = fitbitService.fetchHeartRateData()
-
-                    heartRateResult.onSuccess { heartRate ->
-                        Log.d(TAG, "✅ Heart rate received: $heartRate bpm")
-
-                        // Combine all data
-                        val combinedMetrics = activityMetrics.copy(
-                            heartRate = heartRate,
-                            lastSyncTime = getCurrentTimeString(),
-                            activityLevel = calculateActivityLevel(activityMetrics.steps, activityMetrics.activeMinutes)
-                        )
-
-                        _healthMetrics.value = combinedMetrics
-                        Log.d(TAG, "✅ All metrics combined and updated in UI")
-                        Log.d(TAG, "Activity Level: ${combinedMetrics.activityLevel}")
-
-                    }.onFailure { exception ->
-                        Log.w(TAG, "⚠️ Heart rate fetch failed: ${exception.message}")
-                        // Still show activity data even if heart rate fails
-                        val metricsWithoutHR = activityMetrics.copy(
-                            lastSyncTime = getCurrentTimeString(),
-                            activityLevel = calculateActivityLevel(activityMetrics.steps, activityMetrics.activeMinutes)
-                        )
-                        _healthMetrics.value = metricsWithoutHR
-                        _errorMessage.value = "Could not fetch heart rate: ${exception.message}"
-                    }
-
-                }.onFailure { exception ->
-                    Log.e(TAG, "❌ Activity fetch failed: ${exception.message}", exception)
-                    _errorMessage.value = "Failed to fetch activity data: ${exception.message}"
-
-                    // Check if token expired
-                    if (exception.message?.contains("401") == true ||
-                        exception.message?.contains("Unauthorized") == true) {
-                        Log.w(TAG, "Token expired or unauthorized - logging out")
-                        _isAuthenticated.value = false
-                        _errorMessage.value = "Session expired. Please login again."
-                    }
+                val tokenResult = fitbitService.ensureFreshToken()
+                if (tokenResult.isFailure) {
+                    handleSessionExpired()
+                    return@launch
                 }
-
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Unexpected error: ${e.message}", e)
-                _errorMessage.value = "Unexpected error: ${e.message}"
+                fitbitService.fetchDailyActivity()
+                    .onSuccess { activity -> completeSync(activity) }
+                    .onFailure { exception ->
+                        _errorMessage.value = "Failed to fetch activity data: ${exception.message}"
+                        if (exception.message?.contains("401") == true ||
+                            exception.message?.contains("Unauthorized") == true
+                        ) {
+                            handleSessionExpired()
+                        }
+                    }
             } finally {
                 _isLoading.value = false
-                Log.d(TAG, "fetchHealthMetrics completed")
             }
         }
+    }
+
+    /** Adds heart rate and sleep to today's activity; either may be missing without failing. */
+    private suspend fun completeSync(activity: HealthMetrics) {
+        val warnings = mutableListOf<String>()
+        val heartRate = fitbitService.fetchHeartRateData()
+            .onFailure { warnings += "heart rate" }
+            .getOrDefault(activity.heartRate)
+        val sleepMinutes = fitbitService.fetchSleepData()
+            .onFailure { warnings += "sleep" }
+            .getOrDefault(0)
+
+        val metrics = activity.copy(
+            date = today(),
+            heartRate = heartRate,
+            sleepMinutes = sleepMinutes,
+            lastSyncTime = getCurrentTimeString(),
+            activityLevel = ActivityLevel.from(activity.steps, activity.activeMinutes),
+            timestamp = System.currentTimeMillis()
+        )
+        _healthMetrics.value = metrics
+        if (warnings.isNotEmpty()) {
+            _errorMessage.value = "Could not fetch ${warnings.joinToString(" or ")} data."
+        }
+        saveToHistory(metrics)
+    }
+
+    private suspend fun saveToHistory(metrics: HealthMetrics) {
+        healthRepository.saveHealthMetrics(metrics).first()
+            .onFailure { Log.w(TAG, "Could not save health history: ${it.message}") }
+    }
+
+    private fun observeWeeklyHistory() {
+        viewModelScope.launch {
+            healthRepository.getWeeklyHealthMetrics().collect { result ->
+                result.onSuccess { _weeklyMetrics.value = it }
+                    .onFailure { Log.w(TAG, "Weekly history unavailable: ${it.message}") }
+            }
+        }
+    }
+
+    private fun handleSessionExpired() {
+        Log.w(TAG, "Fitbit session could not be renewed - logging out")
+        fitbitService.clearFitbitUser()
+        _isAuthenticated.value = false
+        _errorMessage.value = "Session expired. Please login again."
     }
 
     /**
      * Logout from Fitbit and clear all data
      */
     fun logout() {
-        Log.d(TAG, "Logging out user")
         fitbitService.clearFitbitUser()
         _isAuthenticated.value = false
         _healthMetrics.value = null
         _errorMessage.value = null
-        Log.d(TAG, "Logout complete - all data cleared")
     }
 
     /**
      * Clear error message
      */
     fun clearError() {
-        Log.d(TAG, "Clearing error message")
         _errorMessage.value = null
     }
 
-    /**
-     * Calculate activity level based on steps and active minutes
-     */
-    private fun calculateActivityLevel(steps: Int, activeMinutes: Int): String {
-        val level = when {
-            steps >= 10000 && activeMinutes >= 30 -> "HIGH"
-            steps >= 5000 && activeMinutes >= 15 -> "MODERATE"
-            steps >= 2500 -> "LOW"
-            else -> "SEDENTARY"
-        }
-        Log.d(TAG, "Calculated activity level: $level (steps=$steps, activeMin=$activeMinutes)")
-        return level
-    }
+    private fun today(): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
 
     /**
      * Get current time as formatted string

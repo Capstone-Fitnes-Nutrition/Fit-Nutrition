@@ -14,6 +14,7 @@ data class HealthMetrics(
     val calories: Int = 0,
     val heartRate: Int = 0,
     val activeMinutes: Int = 0,
+    val sleepMinutes: Int = 0,
     val lastSyncTime: String = "",
     val activityLevel: String = "UNKNOWN",
     val timestamp: Long = System.currentTimeMillis()
