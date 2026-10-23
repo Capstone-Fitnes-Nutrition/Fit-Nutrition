@@ -31,7 +31,8 @@ data class WorkoutHistoryItem(
     val sets: Int,
     val repetitions: Int,
     val durationMinutes: Int,
-    val completedAtEpochMillis: Long
+    val completedAtEpochMillis: Long,
+    val bodyPart: String = ""
 )
 
 data class RecommendationRequest<T>(
@@ -140,7 +141,8 @@ object RecommendationContextFactory {
                     sets = it.sets,
                     repetitions = it.reps,
                     durationMinutes = it.time,
-                    completedAtEpochMillis = it.completedAt
+                    completedAtEpochMillis = it.completedAt,
+                    bodyPart = it.exercise.bodyPart
                 )
             },
             historyNote = historyWarning ?: history.takeIf { it.isEmpty() }

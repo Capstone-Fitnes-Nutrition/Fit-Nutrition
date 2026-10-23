@@ -13,6 +13,8 @@ roomCompiler = "2.8.4"
 coreKtxVersion = "1.17.0"
 navigationCompose = "2.9.6"
 firebaseFirestore = "26.6.0"
+coroutines = "1.8.1"
+lifecycleRuntimeCompose = "2.9.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -27,6 +29,8 @@ androidx-room-compiler = { group = "androidx.room", name = "room-compiler", vers
 core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtxVersion" }
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 firebase-firestore = { group = "com.google.firebase", name="firebase-firestore", version.ref= "firebaseFirestore"}
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
+androidx-lifecycle-runtime-compose = { group = "androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "lifecycleRuntimeCompose" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

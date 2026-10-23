@@ -36,22 +36,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import sheridan.dheripu.fitnutrition.AuthManager
 import sheridan.dheripu.fitnutrition.data.FitnessViewModel
-import sheridan.dheripu.fitnutrition.model.ContextPreparation
 import sheridan.dheripu.fitnutrition.model.Exercise
 import sheridan.dheripu.fitnutrition.model.WorkoutItem
-import sheridan.dheripu.fitnutrition.repository.RecommendationContextRepository
 import sheridan.dheripu.fitnutrition.ui.components.ScreenHeader
+import sheridan.dheripu.fitnutrition.data.RecommendationViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FitnessScreen(
     padding: Modifier = Modifier,
     viewModel: FitnessViewModel = viewModel(),
+    recommendationViewModel: RecommendationViewModel = viewModel(),
     onNavigateToProfile: () -> Unit
 ) {
     var searchString by remember { mutableStateOf("") }
+    val recommendationState by recommendationViewModel.state.collectAsStateWithLifecycle()
     val exercises = viewModel.exercises.value
     val myWorkouts = viewModel.myWorkouts.value
     var selectedExercise by remember { mutableStateOf<Exercise?>(null) }
@@ -61,8 +62,6 @@ fun FitnessScreen(
     var repsInput by remember { mutableStateOf("") }
     var timeInput by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf("") }
-    var workoutRecommendation by remember { mutableStateOf<String?>(null) }
-    var needsFitnessProfile by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -76,25 +75,12 @@ fun FitnessScreen(
 
         RecommendationCard(
             title = "Workout recommendation",
-            recommendation = workoutRecommendation,
-            needsProfile = needsFitnessProfile,
-            onNavigateToProfile = onNavigateToProfile,
-            onGenerate = {
-                needsFitnessProfile = false
-                val userId = AuthManager.currentUser?.uid
-                if (userId == null) {
-                    workoutRecommendation = "Sign in to prepare a personalized sample request."
-                } else {
-                    RecommendationContextRepository().prepareWorkout(
-                        userId = userId,
-                        onPrepared = { result ->
-                            workoutRecommendation = RecommendationDemoFormatter.workout(result)
-                            needsFitnessProfile = result is ContextPreparation.NeedsProfile
-                        },
-                        onError = { message -> workoutRecommendation = message }
-                    )
-                }
-            }
+            state = recommendationState,
+            acceptLabel = "Done",
+            onGenerate = { recommendationViewModel.loadWorkout() },
+            onAccept = recommendationViewModel::accept,
+            onDismiss = { recommendationViewModel.dismiss(it) },
+            onNavigateToProfile = onNavigateToProfile
         )
 
         Row(

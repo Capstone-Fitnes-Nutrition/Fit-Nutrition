@@ -30,13 +30,12 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
-import sheridan.dheripu.fitnutrition.AuthManager
 import sheridan.dheripu.fitnutrition.data.RecipeViewModel
-import sheridan.dheripu.fitnutrition.model.ContextPreparation
 import sheridan.dheripu.fitnutrition.model.Recipe
 import sheridan.dheripu.fitnutrition.model.RecipeFilters
-import sheridan.dheripu.fitnutrition.repository.RecommendationContextRepository
 import sheridan.dheripu.fitnutrition.ui.components.ScreenHeader
+import sheridan.dheripu.fitnutrition.data.RecommendationViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 
 @Composable
@@ -44,16 +43,16 @@ fun NutritionScreen(
     modifier: Modifier = Modifier,
     onRecipeClick: (Int) -> Unit,
     recipeViewModel: RecipeViewModel = viewModel(),
+    recommendationViewModel: RecommendationViewModel = viewModel(),
     padding: Modifier,
     onNavigateToNutritionAnalytics: () -> Unit,
     onNavigateToProfile: () -> Unit
 ) {
     val recipes by recipeViewModel.recipes.collectAsState()
+    val recommendationState by recommendationViewModel.state.collectAsStateWithLifecycle()
     val isLoading by recipeViewModel.isLoading.collectAsState()
     val errorMessage by recipeViewModel.errorMessage.collectAsState()
     val filters by recipeViewModel.currentFilters.collectAsState()
-    var mealRecommendation by remember { mutableStateOf<String?>(null) }
-    var needsNutritionProfile by remember { mutableStateOf(false) }
 
     // Load recipes on first launch
     LaunchedEffect(Unit) {
@@ -83,25 +82,12 @@ fun NutritionScreen(
 
         RecommendationCard(
             title = "Meal recommendation",
-            recommendation = mealRecommendation,
-            needsProfile = needsNutritionProfile,
-            onNavigateToProfile = onNavigateToProfile,
-            onGenerate = {
-                needsNutritionProfile = false
-                val userId = AuthManager.currentUser?.uid
-                if (userId == null) {
-                    mealRecommendation = "Sign in to prepare a personalized sample request."
-                } else {
-                    RecommendationContextRepository().prepareMeal(
-                        userId = userId,
-                        onPrepared = { result ->
-                            mealRecommendation = RecommendationDemoFormatter.meal(result)
-                            needsNutritionProfile = result is ContextPreparation.NeedsProfile
-                        },
-                        onError = { message -> mealRecommendation = message }
-                    )
-                }
-            }
+            state = recommendationState,
+            acceptLabel = "Log meal",
+            onGenerate = { recommendationViewModel.loadMeals() },
+            onAccept = recommendationViewModel::accept,
+            onDismiss = { recommendationViewModel.dismiss(it) },
+            onNavigateToProfile = onNavigateToProfile
         )
 
         // Search and Filters Section
