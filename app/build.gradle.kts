@@ -1,5 +1,16 @@
 import java.util.Properties
-val properties = Properties()
+
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) {
+        file.inputStream().use { load(it) }
+    }
+}
+
+fun secret(name: String): String = localProperties.getProperty(name)
+    ?: System.getenv(name)
+    ?: ""
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -21,11 +32,17 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "FITBIT_CLIENT_ID",
-            "\"${properties.getProperty("FITBIT_CLIENT_ID")}\"")
+            "\"${secret("FITBIT_CLIENT_ID")}\"")
         buildConfigField("String", "FITBIT_CLIENT_SECRET",
-            "\"${properties.getProperty("FITBIT_CLIENT_SECRET")}\"")
+            "\"${secret("FITBIT_CLIENT_SECRET")}\"")
         buildConfigField("String", "FITBIT_REDIRECT_URI",
-            "\"${properties.getProperty("FITBIT_REDIRECT_URI")}\"")
+            "\"${secret("FITBIT_REDIRECT_URI").ifBlank { "fitnutrition://fitbit" }}\"")
+        buildConfigField("String", "SPOONACULAR_API_KEY",
+            "\"${secret("SPOONACULAR_API_KEY")}\"")
+        buildConfigField("String", "EXERCISE_API_KEY",
+            "\"${secret("EXERCISE_API_KEY")}\"")
+        buildConfigField("String", "EXERCISE_API_HOST",
+            "\"${secret("EXERCISE_API_HOST").ifBlank { "exercisedb.p.rapidapi.com" }}\"")
     }
 
     buildTypes {

@@ -5,11 +5,17 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import sheridan.dheripu.fitnutrition.BuildConfig
 import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
     private const val BASE_URL = "https://api.spoonacular.com/"
-    private const val API_KEY = "80195b40cdad49118dd62a074d9901c0"
+
+    // Reason: the key comes from local.properties (or the environment) so it stays out of git.
+    private val apiKey = BuildConfig.SPOONACULAR_API_KEY
+
+    /** False when SPOONACULAR_API_KEY is missing, so callers can explain the failure. */
+    val isConfigured: Boolean get() = apiKey.isNotBlank()
 
     // Create logger
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
@@ -22,7 +28,7 @@ object RetrofitClient {
         .addInterceptor { chain ->
             val original = chain.request()
             val url = original.url.newBuilder()
-                .addQueryParameter("apiKey", API_KEY)
+                .addQueryParameter("apiKey", apiKey)
                 .build()
             val request = original.newBuilder()
                 .url(url)

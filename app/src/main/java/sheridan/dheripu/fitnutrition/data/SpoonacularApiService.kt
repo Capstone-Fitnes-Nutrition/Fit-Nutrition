@@ -9,9 +9,9 @@ import retrofit2.http.Query
 
 interface SpoonacularApiService {
     
+    // The API key is attached by RetrofitClient's interceptor, not per call.
     @GET("recipes/complexSearch")
     suspend fun searchRecipes(
-        @Query("apiKey") apiKey: String,
         @Query("query") query: String = "",
         @Query("maxCalories") maxCalories: Int? = null,
         @Query("minProtein") minProtein: Int? = null,

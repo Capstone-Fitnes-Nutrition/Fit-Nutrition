@@ -1,0 +1,20 @@
+# Copy to local.properties (gitignored) and fill in your own keys, then rebuild.
+# Every value may also be supplied through an environment variable of the same name.
+#
+# sdk.dir is written by Android Studio; keep the one already in your local.properties.
+
+# Spoonacular (https://spoonacular.com/food-api). Without it the app falls back to the
+# offline sample recipes in MockRecipes.
+SPOONACULAR_API_KEY=
+
+# ExerciseDB via RapidAPI (https://rapidapi.com/justin-WFnsXH_t6/api/exercisedb).
+# Without it the Fitness tab reports that the exercise API key is missing.
+EXERCISE_API_KEY=
+# Optional, defaults to exercisedb.p.rapidapi.com
+EXERCISE_API_HOST=
+
+# Fitbit OAuth 2.0 app (https://dev.fitbit.com/apps). The redirect URI must match the
+# fitnutrition://fitbit intent filter in AndroidManifest.xml.
+FITBIT_CLIENT_ID=
+FITBIT_CLIENT_SECRET=
+FITBIT_REDIRECT_URI=fitnutrition://fitbit

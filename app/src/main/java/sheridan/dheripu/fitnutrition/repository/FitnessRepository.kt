@@ -14,6 +14,14 @@ class FitnessRepository {
             return
         }
 
+        if (!RetrofitInstance.isConfigured) {
+            onError(
+                "Exercise API key is missing. Add EXERCISE_API_KEY to local.properties " +
+                    "and rebuild."
+            )
+            return
+        }
+
         val call = RetrofitInstance.api.getExercisesByBodyPart(bodyPart.lowercase())
 
         call.enqueue(object : Callback<List<Exercise>> {
