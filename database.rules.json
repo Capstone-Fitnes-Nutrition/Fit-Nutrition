@@ -1,0 +1,11 @@
+{
+  "//": "Realtime Database rules for the daily Fitbit metrics at users/{uid}/health_metrics/{yyyy-MM-dd}. Publish from the Firebase console: Realtime Database -> Rules, project fitnutrition-aaee1.",
+  "rules": {
+    "users": {
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid",
+        ".write": "auth != null && auth.uid == $uid"
+      }
+    }
+  }
+}

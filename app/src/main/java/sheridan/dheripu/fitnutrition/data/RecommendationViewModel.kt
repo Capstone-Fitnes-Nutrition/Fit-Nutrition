@@ -245,7 +245,7 @@ class RecommendationViewModel(
     }
 
     private suspend fun preferencesFor(userId: String): UserPreferenceProfile =
-        PreferenceLearner.build(attempt { dataSource.recentFeedback(userId) }.orEmpty())
+        PreferenceLearner.build(attempt { dataSource.recentFeedback(userId) }.orEmpty(), clock())
 
     private suspend fun recordShown(
         userId: String,

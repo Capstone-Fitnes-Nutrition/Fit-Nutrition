@@ -5,8 +5,17 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PreferenceLearnerTest {
-    private fun event(action: FeedbackAction, itemId: String, vararg tags: String) =
-        RecommendationFeedback(itemId = itemId, action = action, tags = tags.toList())
+    private fun event(
+        action: FeedbackAction,
+        itemId: String,
+        vararg tags: String,
+        createdAt: Long = NOW
+    ) = RecommendationFeedback(
+        itemId = itemId,
+        action = action,
+        tags = tags.toList(),
+        createdAt = createdAt
+    )
 
     @Test
     fun acceptedTagsGainAffinityAndDismissedTagsLoseIt() {
@@ -42,14 +51,45 @@ class PreferenceLearnerTest {
     }
 
     @Test
-    fun dismissedItemsAreRemembered() {
+    fun recentlyDismissedItemsAreHidden() {
         val profile = PreferenceLearner.build(
             listOf(
                 event(FeedbackAction.DISMISSED, "7"),
                 event(FeedbackAction.ACCEPTED, "8")
-            )
+            ),
+            nowMillis = NOW
         )
 
         assertEquals(setOf("7"), profile.dismissedItemIds)
+    }
+
+    @Test
+    fun aDismissalStopsHidingTheItemOnceTheWindowPasses() {
+        val justInside = PreferenceLearner.DISMISSAL_WINDOW_MILLIS - 1_000
+        val justOutside = PreferenceLearner.DISMISSAL_WINDOW_MILLIS + 1_000
+        val events = listOf(
+            event(FeedbackAction.DISMISSED, "fresh", createdAt = NOW - justInside),
+            event(FeedbackAction.DISMISSED, "stale", "pasta", createdAt = NOW - justOutside)
+        )
+
+        val profile = PreferenceLearner.build(events, nowMillis = NOW)
+
+        assertEquals(setOf("fresh"), profile.dismissedItemIds)
+        // The expired dismissal still shapes ranking, it just stops hiding the item outright.
+        assertTrue(profile.affinityFor(listOf("pasta")) < 0.0)
+    }
+
+    @Test
+    fun aDismissalWithNoTimestampDoesNotHideAnythingForever() {
+        val profile = PreferenceLearner.build(
+            listOf(event(FeedbackAction.DISMISSED, "9", createdAt = 0L)),
+            nowMillis = NOW
+        )
+
+        assertEquals(emptySet<String>(), profile.dismissedItemIds)
+    }
+
+    private companion object {
+        const val NOW = 1_792_944_000_000L
     }
 }

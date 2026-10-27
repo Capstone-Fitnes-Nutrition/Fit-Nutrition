@@ -25,7 +25,12 @@ data class RecommendationFeedback(
     val createdAt: Long = 0L
 )
 
-/** Per-user tag affinities in the range -1..1, learned from feedback events. */
+/**
+ * Per-user tag affinities in the range -1..1, learned from feedback events.
+ *
+ * [dismissedItemIds] holds only the *recent* dismissals, which the engines drop outright. A
+ * dismissal keeps affecting ranking through [affinities] long after it stops hiding the item.
+ */
 data class UserPreferenceProfile(
     val affinities: Map<String, Double> = emptyMap(),
     val dismissedItemIds: Set<String> = emptySet()
@@ -43,7 +48,17 @@ object PreferenceLearner {
     // twice, so a single accept does not dominate ranking.
     private const val PRIOR_EVENTS = 2.0
 
-    fun build(events: List<RecommendationFeedback>): UserPreferenceProfile {
+    /**
+     * How long a dismissed suggestion stays hidden. Long enough that refreshing does not hand
+     * back what the user just rejected, short enough that a good suggestion is not lost for
+     * good over one dismissal.
+     */
+    const val DISMISSAL_WINDOW_MILLIS = 10 * 60 * 1000L
+
+    fun build(
+        events: List<RecommendationFeedback>,
+        nowMillis: Long = System.currentTimeMillis()
+    ): UserPreferenceProfile {
         val totals = mutableMapOf<String, Pair<Double, Int>>()
         events.forEach { event ->
             val signal = signalOf(event.action) ?: return@forEach
@@ -56,11 +71,19 @@ object PreferenceLearner {
             affinities = totals.mapValues { (_, value) ->
                 value.first / (value.second + PRIOR_EVENTS)
             },
-            dismissedItemIds = events.filter { it.action == FeedbackAction.DISMISSED }
+            dismissedItemIds = events
+                .filter { it.action == FeedbackAction.DISMISSED && it.isRecent(nowMillis) }
                 .map { it.itemId }
                 .toSet()
         )
     }
+
+    /**
+     * True while the dismissal is still inside the suppression window. An event with no
+     * timestamp counts as expired, so a missing `createdAt` cannot hide an item forever.
+     */
+    private fun RecommendationFeedback.isRecent(nowMillis: Long): Boolean =
+        createdAt > 0L && nowMillis - createdAt in 0 until DISMISSAL_WINDOW_MILLIS
 
     private fun signalOf(action: FeedbackAction): Double? = when (action) {
         FeedbackAction.SHOWN -> null
