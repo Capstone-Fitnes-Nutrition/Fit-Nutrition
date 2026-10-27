@@ -43,7 +43,8 @@ fun NutritionScreen(
     modifier: Modifier = Modifier,
     onRecipeClick: (Int) -> Unit,
     recipeViewModel: RecipeViewModel = viewModel(),
-    recommendationViewModel: RecommendationViewModel = viewModel(),
+    // Reason: keyed so the meal card does not share state with the workout card on Fitness.
+    recommendationViewModel: RecommendationViewModel = viewModel(key = "meal-recommendations"),
     padding: Modifier,
     onNavigateToNutritionAnalytics: () -> Unit,
     onNavigateToProfile: () -> Unit
@@ -59,104 +60,123 @@ fun NutritionScreen(
         recipeViewModel.searchRecipes()
     }
 
-    Column(
+    // Reason: one scrolling list for the whole screen. With a plain Column the recipe list was
+    // squeezed to nothing as soon as the recommendation card filled with suggestions.
+    LazyColumn(
         modifier = modifier
             .then(padding)
-            .fillMaxSize()
+            .fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        ScreenHeader(
-            title = "Nutrition & Recipes",
-            subtitle = "Find healthy meals based on your preferences"
-        )
-
-        OutlinedButton(
-            onClick = onNavigateToNutritionAnalytics,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-        ) {
-            Icon(Icons.Default.Insights, contentDescription = null)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("View Nutrition Analytics")
+        item {
+            ScreenHeader(
+                title = "Nutrition & Recipes",
+                subtitle = "Find healthy meals based on your preferences"
+            )
         }
 
-        RecommendationCard(
-            title = "Meal recommendation",
-            state = recommendationState,
-            acceptLabel = "Log meal",
-            onGenerate = { recommendationViewModel.loadMeals() },
-            onAccept = recommendationViewModel::accept,
-            onDismiss = { recommendationViewModel.dismiss(it) },
-            onNavigateToProfile = onNavigateToProfile
-        )
+        item {
+            OutlinedButton(
+                onClick = onNavigateToNutritionAnalytics,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+            ) {
+                Icon(Icons.Default.Insights, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("View Nutrition Analytics")
+            }
+        }
+
+        item {
+            RecommendationCard(
+                title = "Meal recommendation",
+                state = recommendationState,
+                acceptLabel = "Log meal",
+                onGenerate = { recommendationViewModel.loadMeals() },
+                onAccept = recommendationViewModel::accept,
+                onDismiss = { recommendationViewModel.dismiss(it) },
+                onNavigateToProfile = onNavigateToProfile
+            )
+        }
 
         // Search and Filters Section
-        RecipeFiltersSection(
-            currentFilters = filters,
-            onSearch = { query -> recipeViewModel.updateQuery(query) },
-            onApplyDiet = { diet -> recipeViewModel.applyDietFilter(diet) },
-            onApplyCalorieFilter = { calories -> recipeViewModel.applyCalorieFilter(calories) },
-            onApplyProteinFilter = { protein -> recipeViewModel.applyProteinFilter(protein) },
-            onClearFilters = { recipeViewModel.clearFilters() }
-        )
+        item {
+            RecipeFiltersSection(
+                currentFilters = filters,
+                onSearch = { query -> recipeViewModel.updateQuery(query) },
+                onApplyDiet = { diet -> recipeViewModel.applyDietFilter(diet) },
+                onApplyCalorieFilter = { calories -> recipeViewModel.applyCalorieFilter(calories) },
+                onApplyProteinFilter = { protein -> recipeViewModel.applyProteinFilter(protein) },
+                onClearFilters = { recipeViewModel.clearFilters() }
+            )
+        }
 
         // Error Message
         errorMessage?.let { message ->
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer
-                )
-            ) {
-                Text(
-                    text = message,
-                    modifier = Modifier.padding(16.dp),
-                    color = MaterialTheme.colorScheme.onErrorContainer
-                )
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Text(
+                        text = message,
+                        modifier = Modifier.padding(16.dp),
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
             }
         }
 
         // Recipes List
-        if (isLoading) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
-            }
-        } else if (recipes.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
+        when {
+            isLoading -> item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        Icons.Default.RestaurantMenu,
-                        contentDescription = "No recipes",
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                    )
-                    Text(
-                        text = "No recipes found",
-                        modifier = Modifier.padding(top = 16.dp),
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                    )
+                    CircularProgressIndicator()
                 }
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                items(recipes) { recipe ->
-                    RecipeCard(recipe = recipe,
-                    onRecipeClick = onRecipeClick)
+
+            recipes.isEmpty() -> item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            Icons.Default.RestaurantMenu,
+                            contentDescription = "No recipes",
+                            modifier = Modifier.size(64.dp),
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                        )
+                        Text(
+                            text = "No recipes found",
+                            modifier = Modifier.padding(top = 16.dp),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                        )
+                    }
                 }
+            }
+
+            else -> items(recipes, key = { it.id }) { recipe ->
+                RecipeCard(
+                    recipe = recipe,
+                    onRecipeClick = onRecipeClick,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
             }
         }
     }
@@ -315,10 +335,11 @@ fun RecipeFiltersSection(
 
 @Composable
 fun RecipeCard(recipe: Recipe,
-               onRecipeClick: (Int) -> Unit
+               onRecipeClick: (Int) -> Unit,
+               modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth()
             .clickable { onRecipeClick(recipe.id) },
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {

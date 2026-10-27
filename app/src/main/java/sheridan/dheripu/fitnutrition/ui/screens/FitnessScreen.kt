@@ -3,12 +3,12 @@ package sheridan.dheripu.fitnutrition.ui.screens
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -48,7 +48,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 fun FitnessScreen(
     padding: Modifier = Modifier,
     viewModel: FitnessViewModel = viewModel(),
-    recommendationViewModel: RecommendationViewModel = viewModel(),
+    // Reason: keyed so the workout card does not share state with the meal card on Nutrition.
+    recommendationViewModel: RecommendationViewModel = viewModel(key = "workout-recommendations"),
     onNavigateToProfile: () -> Unit
 ) {
     var searchString by remember { mutableStateOf("") }
@@ -63,27 +64,35 @@ fun FitnessScreen(
     var timeInput by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf("") }
 
-    Column(
+    // Reason: one scrolling list for the whole screen. With a plain Column everything below the
+    // recommendation card became unreachable once it filled with suggestions.
+    LazyColumn(
         modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
+            .then(padding)
+            .fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        ScreenHeader(
-            title = "Fitness",
-            subtitle = "Workout plans and tracking"
-        )
+        item {
+            ScreenHeader(
+                title = "Fitness",
+                subtitle = "Workout plans and tracking"
+            )
+        }
 
-        RecommendationCard(
-            title = "Workout recommendation",
-            state = recommendationState,
-            acceptLabel = "Done",
-            onGenerate = { recommendationViewModel.loadWorkout() },
-            onAccept = recommendationViewModel::accept,
-            onDismiss = { recommendationViewModel.dismiss(it) },
-            onNavigateToProfile = onNavigateToProfile
-        )
+        item {
+            RecommendationCard(
+                title = "Workout recommendation",
+                state = recommendationState,
+                acceptLabel = "Done",
+                onGenerate = { recommendationViewModel.loadWorkout() },
+                onAccept = recommendationViewModel::accept,
+                onDismiss = { recommendationViewModel.dismiss(it) },
+                onNavigateToProfile = onNavigateToProfile
+            )
+        }
 
-        Row(
+        item { Row(
             modifier = Modifier
                 .fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -102,111 +111,103 @@ fun FitnessScreen(
             ) {
                 Text("Go!")
             }
-        }
+        } }
 
         if (searchString.isNotBlank() || selectedFilter.isNotBlank()) {
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(
-                onClick = {
-                    selectedFilter = ""
-                    searchString = ""
-                    viewModel.clearExercises()
-                },
-            ) {
-                Text("Clear Filters")
+            item {
+                Button(
+                    onClick = {
+                        selectedFilter = ""
+                        searchString = ""
+                        viewModel.clearExercises()
+                    },
+                ) {
+                    Text("Clear Filters")
+                }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        item {
+            Text(
+                text = "Exercise Filters",
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)
+            )
+        }
 
-        Text(
-            text = "Exercise Filters",
-            style = MaterialTheme.typography.titleSmall,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val bodyParts = listOf("Chest", "Back", "Waist")
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            val bodyParts = listOf("Chest", "Back", "Waist")
+                bodyParts.forEach { part ->
+                    FilterChip(
+                        selected = (selectedFilter == part),
+                        onClick = {
+                            selectedFilter = part
+                            viewModel.fetchExercisesByBodyPart(part)
+                        },
+                        label = {
+                            Text(part)
+                        }
+                    )
+                }
+            }
+        }
 
-            bodyParts.forEach { part ->
-                FilterChip(
-                    selected = (selectedFilter == part),
-                    onClick = {
-                        selectedFilter = part
-                        viewModel.fetchExercisesByBodyPart(part)
+        viewModel.errorMessage?.let { error ->
+            item {
+                Text(
+                    text = error,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(8.dp)
+                )
+            }
+        }
+
+        items(exercises, key = { it.id }) { exercise ->
+            Card(modifier = Modifier.fillMaxWidth()) {
+                ListItem(
+                    modifier = Modifier.clickable {
+                        selectedExercise = exercise
+                        displayDetails = true
                     },
-                    label = {
-                        Text(part)
+                    headlineContent = { Text(exercise.name) },
+                    supportingContent = { Text("Target: ${exercise.target}") },
+                    trailingContent = {
+                        IconButton(
+                            onClick = {
+                                selectedExercise = exercise
+                                displayInput = true
+                            }
+                        ) {
+                            Icon(Icons.Filled.Add, contentDescription = "Add exercise")
+                        }
                     }
                 )
             }
         }
 
-        viewModel.errorMessage?.let { error ->
-            Spacer(modifier = Modifier.height(8.dp))
+        item {
             Text(
-                text = error,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(8.dp)
+                "My Workouts",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)
             )
         }
 
-
-        if (exercises.isNotEmpty()) {
-            LazyColumn(
-                modifier = Modifier.heightIn(max = 300.dp)
-
-            ) {
-                items(exercises) { exercise ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                    ) {
-                        ListItem(
-                            modifier = Modifier.clickable {
-                                selectedExercise = exercise
-                                displayDetails = true
-                            },
-                            headlineContent = { Text(exercise.name) },
-                            supportingContent = { Text("Target: ${exercise.target}") },
-                            trailingContent = {
-                                IconButton(
-                                    onClick = {
-                                        selectedExercise = exercise
-                                        displayInput = true
-                                    }
-                                ) {
-                                    Icon(Icons.Filled.Add, contentDescription = "Add exercise")
-                                }
-                            }
-                        )
-                    }
-                }
-            }
-        }
-
-        Text(
-            "My Workouts",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(vertical = 8.dp)
-
-        )
-
         if (myWorkouts.isEmpty()) {
-            Text("No exercises added yet")
+            item { Text("No exercises added yet") }
         } else {
-            myWorkouts.forEach { item ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                ) {
+            items(
+                myWorkouts,
+                key = { "${it.exercise.id}-${it.completedAt}" }
+            ) { item ->
+                Card(modifier = Modifier.fillMaxWidth()) {
                     ListItem(
                         headlineContent = { Text(item.exercise.name) },
                         supportingContent = {
