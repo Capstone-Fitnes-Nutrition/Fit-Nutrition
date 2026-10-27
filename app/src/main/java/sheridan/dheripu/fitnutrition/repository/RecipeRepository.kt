@@ -2,6 +2,7 @@ package sheridan.dheripu.fitnutrition.repository
 
 import retrofit2.Response
 import sheridan.dheripu.fitnutrition.data.RetrofitClient
+import sheridan.dheripu.fitnutrition.model.Nutrition
 import sheridan.dheripu.fitnutrition.model.Recipe
 import sheridan.dheripu.fitnutrition.model.RecipeFilters
 
@@ -31,7 +32,7 @@ class RecipeRepository {
         if (!response.isSuccessful) {
             throw RecipeApiException(response.failureMessage())
         }
-        return response.body()?.results ?: emptyList()
+        return response.body()?.results.orEmpty().map { it.normalized() }
     }
 
     suspend fun getRecipeById(id: Int): Recipe? {
@@ -46,8 +47,27 @@ class RecipeRepository {
         if (!response.isSuccessful) {
             throw RecipeApiException(response.failureMessage())
         }
-        return response.body()
+        return response.body()?.normalized()
     }
+
+    /**
+     * Spoonacular omits whole fields rather than sending empty ones, and Gson writes null
+     * into them even though the model declares them non-null. Repair that here, at the
+     * boundary, so nothing downstream has to defend against a null list or title.
+     */
+    private fun Recipe.normalized(): Recipe = copy(
+        title = title.orEmptyString(),
+        image = image.orEmptyString(),
+        summary = summary.orEmptyString(),
+        extendedIngredients = extendedIngredients.orEmptyList(),
+        diets = diets.orEmptyList(),
+        dishTypes = dishTypes.orEmptyList(),
+        nutrition = nutrition?.let { Nutrition(it.nutrients.orEmptyList()) }
+    )
+
+    private fun <T> List<T>?.orEmptyList(): List<T> = this ?: emptyList()
+
+    private fun String?.orEmptyString(): String = this ?: ""
 
     private fun List<String>.joinToCsv(): String? =
         joinToString(",").takeIf { it.isNotEmpty() }
