@@ -45,7 +45,13 @@ data class RecommendationRequest<T>(
 data class RecommendationResponse<T>(
     val schemaVersion: Int = 1,
     val recommendations: List<T>,
-    val rationale: String
+    val rationale: String,
+    /**
+     * Something the user should know even though suggestions were produced, such as candidates
+     * their profile excluded. Shown alongside the results; [rationale] only surfaces when there
+     * are none.
+     */
+    val advisory: String? = null
 )
 
 data class MealSuggestion(

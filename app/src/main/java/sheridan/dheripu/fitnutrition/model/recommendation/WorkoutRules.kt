@@ -21,6 +21,7 @@ internal object WorkoutRules {
     )
     private val advancedEquipment = setOf("barbell", "olympic barbell", "trap bar")
     private const val ADVANCED_PREREQUISITE_WORKOUTS = 5
+    private const val MAX_EQUIPMENT_EXAMPLES = 3
     private const val INTERMEDIATE_PREREQUISITE_WORKOUTS = 3
 
     val hasEquipment = WorkoutFilter { context, exercise ->
@@ -46,6 +47,40 @@ internal object WorkoutRules {
             in advancedEquipment -> 3
             else -> 2
         }
+    }
+
+    /**
+     * Explains that [blockedCount] exercises were dropped because they need equipment the user
+     * has not listed, naming a few of them. Without this the equipment filter is invisible and
+     * looks like it is being ignored.
+     */
+    fun equipmentLockMessage(blockedCount: Int, neededEquipment: List<String>): String {
+        val examples = neededEquipment.distinct().take(MAX_EQUIPMENT_EXAMPLES)
+        val plural = if (blockedCount == 1) "exercise needs" else "exercises need"
+        val named = if (examples.isEmpty()) "" else " (${examples.joinToString(", ")})"
+        return "$blockedCount $plural equipment$named that is not on your list."
+    }
+
+    /**
+     * Explains that the level gate, not the equipment list, removed [lockedCount] exercises,
+     * and names what would unlock them. BR8 and BR9 are easy to mistake for a bug otherwise:
+     * a sedentary user who owns a full gym still sees only body-weight work.
+     */
+    fun levelLockMessage(context: WorkoutRecommendationContext, lockedCount: Int): String {
+        val completed = context.recentWorkouts.size
+        val unlock = when {
+            activityScore(context.activityLevel) >= 3 ->
+                "log ${ADVANCED_PREREQUISITE_WORKOUTS - completed} more workouts"
+            completed >= INTERMEDIATE_PREREQUISITE_WORKOUTS ->
+                "raise your activity level"
+            else ->
+                "raise your activity level above " +
+                    context.activityLevel.orEmpty().ifBlank { "sedentary" }.lowercase() +
+                    ", or log ${INTERMEDIATE_PREREQUISITE_WORKOUTS - completed} more workouts"
+        }
+        val plural = if (lockedCount == 1) "exercise is" else "exercises are"
+        return "$lockedCount $plural you have equipment for sit above your current level; " +
+            "$unlock to unlock them."
     }
 
     fun maxDifficulty(context: WorkoutRecommendationContext): Int {

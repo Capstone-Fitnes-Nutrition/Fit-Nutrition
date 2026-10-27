@@ -130,6 +130,58 @@ class WorkoutRecommendationEngineTest {
         assertEquals("workout-2-$NOW", result.recommendations.single().recommendationId)
     }
 
+    @Test
+    fun equipmentYouOwnButCannotUseYetIsExplained() {
+        val machines = (1..3).map {
+            exercise("m$it", "smith press $it", "chest", equipment = "smith machine")
+        }
+        val sedentary = context(activityLevel = "Sedentary", equipment = listOf("Smith machine"))
+
+        val result = engine.recommend(
+            sedentary,
+            machines + exercise("p1", "push up", "chest"),
+            UserPreferenceProfile(),
+            NOW
+        )
+
+        val advisory = requireNotNull(result.advisory)
+        assertTrue(advisory.contains("3 exercises"))
+        assertTrue(advisory.contains("equipment for"))
+        assertTrue(advisory.contains("activity level"))
+        assertEquals("push up", result.recommendations.single().item.exercise.name)
+    }
+
+    @Test
+    fun exercisesNeedingEquipmentYouDoNotOwnAreNamed() {
+        val result = engine.recommend(
+            context(equipment = listOf("Body weight")),
+            listOf(
+                exercise("1", "push up", "chest"),
+                exercise("2", "bench press", "chest", equipment = "barbell"),
+                exercise("3", "cable fly", "chest", equipment = "cable")
+            ),
+            UserPreferenceProfile(),
+            NOW
+        )
+
+        val advisory = requireNotNull(result.advisory)
+        assertTrue(advisory.contains("2 exercises need equipment"))
+        assertTrue(advisory.contains("barbell"))
+        assertTrue(advisory.contains("cable"))
+    }
+
+    @Test
+    fun noAdvisoryWhenTheLevelGateRemovedNothing() {
+        val result = engine.recommend(
+            context(equipment = listOf("Body weight")),
+            listOf(exercise("1", "push up", "chest")),
+            UserPreferenceProfile(),
+            NOW
+        )
+
+        assertEquals(null, result.advisory)
+    }
+
     private fun context(
         goal: String = "General Fitness",
         activityLevel: String = "Moderately Active",

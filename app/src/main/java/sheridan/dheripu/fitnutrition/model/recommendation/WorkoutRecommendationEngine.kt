@@ -19,14 +19,33 @@ class WorkoutRecommendationEngine(
         preferences: UserPreferenceProfile,
         nowMillis: Long
     ): RecommendationResponse<ScoredRecommendation<PrescribedExercise>> {
-        val eligible = candidates
+        val offered = candidates
             .distinctBy { it.id }
             .filterNot { it.id in preferences.dismissedItemIds }
-            .filter { exercise -> WorkoutRules.all.all { it.keep(context, exercise) } }
+        // Reason: the two hard rules are applied separately so the user can be told which one
+        // excluded their equipment. Owning a barbell is useless information on its own if the
+        // level gate is what actually removed every barbell exercise.
+        val equipmentOwned = offered.filter { WorkoutRules.hasEquipment.keep(context, it) }
+        val eligible = equipmentOwned.filter { WorkoutRules.withinLevel.keep(context, it) }
+        val lockedByLevel = equipmentOwned.size - eligible.size
+        val missingEquipment = offered.filterNot { it in equipmentOwned }
+        val advisory = listOfNotNull(
+            missingEquipment.size.takeIf { it > 0 }?.let {
+                val needed = missingEquipment
+                    .map { exercise -> exercise.equipment }
+                    .filter(String::isNotBlank)
+                WorkoutRules.equipmentLockMessage(it, needed)
+            },
+            lockedByLevel.takeIf { it > 0 }?.let { WorkoutRules.levelLockMessage(context, it) }
+        ).joinToString(" ").ifBlank { null }
         if (eligible.isEmpty()) {
             return RecommendationResponse(
                 recommendations = emptyList(),
-                rationale = "No exercises matched your equipment and current level."
+                rationale = if (lockedByLevel > 0) {
+                    WorkoutRules.levelLockMessage(context, lockedByLevel)
+                } else {
+                    "No exercises matched your equipment and current level."
+                }
             )
         }
         val ranked = eligible.map { score(context, it, preferences, nowMillis) }.ranked()
@@ -35,7 +54,8 @@ class WorkoutRecommendationEngine(
         }
         return RecommendationResponse(
             recommendations = picks,
-            rationale = "Ranked ${eligible.size} of ${candidates.size} exercises for your level."
+            rationale = "Ranked ${eligible.size} of ${candidates.size} exercises for your level.",
+            advisory = advisory
         )
     }
 

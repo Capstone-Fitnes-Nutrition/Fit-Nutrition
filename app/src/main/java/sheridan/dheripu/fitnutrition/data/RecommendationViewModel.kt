@@ -290,6 +290,7 @@ class RecommendationViewModel(
     ): String? = listOfNotNull(
         historyNote,
         sourceNote,
+        response.advisory,
         response.rationale.takeIf { response.recommendations.isEmpty() }
     ).joinToString(" ").ifBlank { null }
 
