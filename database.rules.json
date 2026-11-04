@@ -1,5 +1,5 @@
 {
-  "//": "Realtime Database rules for the daily Fitbit metrics at users/{uid}/health_metrics/{yyyy-MM-dd}. Publish from the Firebase console: Realtime Database -> Rules, project fitnutrition-aaee1.",
+  "//": "Realtime Database rules for the daily Fitbit metrics at users/{uid}/health_metrics/{yyyy-MM-dd} and the manually entered step counts at users/{uid}/manual_steps/{yyyy-MM-dd}. Both sit under users/$uid, so the per-user read and write rule below already covers them. Publish from the Firebase console: Realtime Database -> Rules, project fitnutrition-aaee1.",
   "rules": {
     "users": {
       "$uid": {

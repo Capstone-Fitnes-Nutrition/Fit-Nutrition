@@ -152,6 +152,30 @@ class WorkoutRecommendationEngineTest {
     }
 
     @Test
+    fun theStrongestBodyPartDoesNotTakeEverySpareSlot() {
+        // Weight loss scores cardio highest, so without a spread the whole list is cardio.
+        val cardio = (1..6).map { exercise("c$it", "cardio move $it", "cardio") }
+        val equipmentWork = (1..3).map {
+            exercise("d$it", "dumbbell move $it", "chest", equipment = "dumbbell")
+        }
+
+        val result = engine.recommend(
+            context(goal = "Weight Loss", equipment = listOf("Dumbbell")),
+            cardio + equipmentWork,
+            UserPreferenceProfile(),
+            NOW
+        )
+
+        val bodyParts = result.recommendations.map { it.item.exercise.bodyPart }
+        assertEquals(5, result.recommendations.size)
+        assertTrue("owned equipment should appear: $bodyParts", bodyParts.contains("chest"))
+        assertTrue(
+            "cardio should not fill every slot: $bodyParts",
+            bodyParts.count { it == "cardio" } < 5
+        )
+    }
+
+    @Test
     fun exercisesNeedingEquipmentYouDoNotOwnAreNamed() {
         val result = engine.recommend(
             context(equipment = listOf("Body weight")),

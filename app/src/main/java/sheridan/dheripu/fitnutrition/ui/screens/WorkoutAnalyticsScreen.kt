@@ -22,6 +22,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,10 +31,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import sheridan.dheripu.fitnutrition.data.FitnessViewModel
+import sheridan.dheripu.fitnutrition.data.StepsViewModel
 import sheridan.dheripu.fitnutrition.model.WorkoutItem
 import sheridan.dheripu.fitnutrition.model.analytics.WorkoutAnalytics
+import sheridan.dheripu.fitnutrition.model.analytics.StepAnalyticsFactory
 import sheridan.dheripu.fitnutrition.model.analytics.WorkoutAnalyticsFactory
 import sheridan.dheripu.fitnutrition.ui.components.InfoCard
 import sheridan.dheripu.fitnutrition.ui.components.ScreenHeader
@@ -44,9 +48,14 @@ import java.util.Locale
 @Composable
 fun WorkoutAnalyticsScreen(
     onBackClick: () -> Unit,
-    fitnessViewModel: FitnessViewModel = viewModel()
+    fitnessViewModel: FitnessViewModel = viewModel(),
+    stepsViewModel: StepsViewModel = viewModel()
 ) {
     BackHandler { onBackClick() }
+
+    // Reason: steps are loaded when the screen opens so the totals reflect anything just entered
+    // on the Fitness tab.
+    LaunchedEffect(Unit) { stepsViewModel.load() }
 
     var selectedTab by remember { mutableStateOf(0) }
     val tabs = listOf("Weekly", "Monthly")
@@ -61,6 +70,14 @@ fun WorkoutAnalyticsScreen(
     }
     val analytics = remember(workouts, daysInPeriod) {
         WorkoutAnalyticsFactory.from(workouts, daysInPeriod)
+    }
+
+    val stepsState by stepsViewModel.state.collectAsStateWithLifecycle()
+    val stepsInPeriod = remember(stepsState.entries, daysInPeriod) {
+        StepAnalyticsFactory.withinPeriod(stepsState.entries, daysInPeriod)
+    }
+    val stepAnalytics = remember(stepsState.entries, daysInPeriod) {
+        StepAnalyticsFactory.from(stepsState.entries, daysInPeriod)
     }
 
     Column(
@@ -103,18 +120,12 @@ fun WorkoutAnalyticsScreen(
             }
 
             workoutsInPeriod.isEmpty() -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "No workouts logged in this period. Add exercises on the " +
-                            "Fitness tab to start tracking.",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                }
+                Text(
+                    text = "No workouts logged in this period. Add exercises on the " +
+                        "Fitness tab to start tracking.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(24.dp)
+                )
             }
 
             else -> {
@@ -123,6 +134,15 @@ fun WorkoutAnalyticsScreen(
                     workouts = workoutsInPeriod
                 )
             }
+        }
+
+        if (!(isLoading && workouts.isEmpty())) {
+            StepAnalyticsSection(
+                analytics = stepAnalytics,
+                entries = stepsInPeriod,
+                error = stepsState.error,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
         }
     }
 }

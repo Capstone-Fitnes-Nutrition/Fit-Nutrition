@@ -37,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import sheridan.dheripu.fitnutrition.data.FitnessViewModel
+import sheridan.dheripu.fitnutrition.data.StepsViewModel
 import sheridan.dheripu.fitnutrition.model.Exercise
 import sheridan.dheripu.fitnutrition.model.WorkoutItem
 import sheridan.dheripu.fitnutrition.ui.components.ScreenHeader
@@ -50,10 +51,12 @@ fun FitnessScreen(
     viewModel: FitnessViewModel = viewModel(),
     // Reason: keyed so the workout card does not share state with the meal card on Nutrition.
     recommendationViewModel: RecommendationViewModel = viewModel(key = "workout-recommendations"),
+    stepsViewModel: StepsViewModel = viewModel(),
     onNavigateToProfile: () -> Unit
 ) {
     var searchString by remember { mutableStateOf("") }
     val recommendationState by recommendationViewModel.state.collectAsStateWithLifecycle()
+    val stepsState by stepsViewModel.state.collectAsStateWithLifecycle()
     val exercises = viewModel.exercises.value
     val myWorkouts = viewModel.myWorkouts.value
     var selectedExercise by remember { mutableStateOf<Exercise?>(null) }
@@ -89,6 +92,17 @@ fun FitnessScreen(
                 onAccept = recommendationViewModel::accept,
                 onDismiss = { recommendationViewModel.dismiss(it) },
                 onNavigateToProfile = onNavigateToProfile
+            )
+        }
+
+        item {
+            StepEntryCard(
+                state = stepsState,
+                onSave = stepsViewModel::saveSteps,
+                onInputOpened = {
+                    stepsViewModel.consumeMessage()
+                    stepsViewModel.clearError()
+                }
             )
         }
 

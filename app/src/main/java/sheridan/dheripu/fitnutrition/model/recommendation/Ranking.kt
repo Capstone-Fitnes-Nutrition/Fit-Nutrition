@@ -64,7 +64,20 @@ internal fun <R> pickVaried(
             perGroup[group] = (perGroup[group] ?: 0) + 1
         }
     }
-    ranked.filterNot { it in picked }.take(count - picked.size).let { picked += it }
+    // Reason: the remaining slots go to the least represented group first, not to whatever
+    // scores highest. Filling them by score alone handed every spare slot back to the
+    // strongest group — for a weight-loss goal that meant an all-cardio list, and the
+    // equipment the user owns never showed up however much it widened the candidate pool.
+    while (picked.size < count) {
+        val next = ranked.filterNot { it in picked }.minWithOrNull(
+            compareBy<ScoredRecommendation<R>> { perGroup[groupOf(it)] ?: 0 }
+                .thenByDescending { it.score.total }
+                .thenBy { it.itemId }
+        ) ?: break
+        picked += next
+        val group = groupOf(next)
+        perGroup[group] = (perGroup[group] ?: 0) + 1
+    }
     return picked
 }
 
