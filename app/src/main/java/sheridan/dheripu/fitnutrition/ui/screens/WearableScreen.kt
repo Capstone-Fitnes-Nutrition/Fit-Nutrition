@@ -55,7 +55,11 @@ fun WearableScreen(padding: Modifier = Modifier) {
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
-                containerColor = if (isAuthenticated) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.tertiaryContainer
+                containerColor = if (isAuthenticated) {
+                    MaterialTheme.colorScheme.secondaryContainer
+                } else {
+                    MaterialTheme.colorScheme.tertiaryContainer
+                }
             )
         ) {
             Row(
@@ -81,7 +85,11 @@ fun WearableScreen(padding: Modifier = Modifier) {
                 Icon(
                     imageVector = if (isAuthenticated) Icons.Default.CheckCircle else Icons.Default.Warning,
                     contentDescription = null,
-                    tint = if (isAuthenticated) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary,
+                    tint = if (isAuthenticated) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.tertiary
+                    },
                     modifier = Modifier.size(32.dp)
                 )
             }
@@ -91,7 +99,9 @@ fun WearableScreen(padding: Modifier = Modifier) {
         errorMessage?.let { error ->
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
             ) {
                 Row(
                     modifier = Modifier
@@ -107,7 +117,11 @@ fun WearableScreen(padding: Modifier = Modifier) {
                         modifier = Modifier.weight(1f)
                     )
                     IconButton(onClick = { viewModel.clearError() }) {
-                        Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = MaterialTheme.colorScheme.onErrorContainer)
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Dismiss",
+                            tint = MaterialTheme.colorScheme.onErrorContainer
+                        )
                     }
                 }
             }
@@ -195,7 +209,9 @@ private fun MockDataToggle(
 private fun LoginSection(configured: Boolean, onLoginClick: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        )
     ) {
         Column(
             modifier = Modifier
@@ -369,7 +385,9 @@ private fun HealthMetricsSection(
         // Last Sync Info
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            )
         ) {
             Row(
                 modifier = Modifier
@@ -379,7 +397,11 @@ private fun HealthMetricsSection(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("Last Sync", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        "Last Sync",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     Text(
                         text = metrics.lastSyncTime.ifEmpty { "Just now" },
                         fontSize = 14.sp,
@@ -462,7 +484,11 @@ private fun EmptyMetricsSection(onFetch: () -> Unit) {
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(16.dp))
-            Text("No data available", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                "No data available",
+                fontSize = 16.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = onFetch) {
                 Text("Fetch Data")

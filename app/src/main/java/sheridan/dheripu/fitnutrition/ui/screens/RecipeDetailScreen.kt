@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import sheridan.dheripu.fitnutrition.data.NutritionViewModel
@@ -38,7 +39,7 @@ fun RecipeDetailScreen(
     var recipe by remember { mutableStateOf<Recipe?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    val nutritionUiState by nutritionViewModel.uiState.collectAsState()
+    val nutritionUiState by nutritionViewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     
     // Load recipe details when screen opens
@@ -136,13 +137,17 @@ fun RecipeDetailScreen(
             }
         }
         // Success state - show recipe
-        else if (recipe != null) {
-            RecipeDetailContent(
-                recipe = recipe!!,
-                isLogging = nutritionUiState.isLogging,
-                onLogMeal = { nutritionViewModel.logRecipe(recipe!!) },
-                modifier = Modifier.padding(innerPadding)
-            )
+        else {
+            // Reason: smart-casting the delegated state value into a local is what removes the
+            // two non-null assertions; the delegate can change between the check and the read.
+            recipe?.let { loadedRecipe ->
+                RecipeDetailContent(
+                    recipe = loadedRecipe,
+                    isLogging = nutritionUiState.isLogging,
+                    onLogMeal = { nutritionViewModel.logRecipe(loadedRecipe) },
+                    modifier = Modifier.padding(innerPadding)
+                )
+            }
         }
     }
 }

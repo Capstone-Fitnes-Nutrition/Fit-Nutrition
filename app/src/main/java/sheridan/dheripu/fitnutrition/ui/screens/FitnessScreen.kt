@@ -36,6 +36,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import sheridan.dheripu.fitnutrition.data.FitnessViewModel
 import sheridan.dheripu.fitnutrition.data.StepsViewModel
 import sheridan.dheripu.fitnutrition.model.Exercise
@@ -62,9 +66,6 @@ fun FitnessScreen(
     var selectedExercise by remember { mutableStateOf<Exercise?>(null) }
     var displayInput by remember { mutableStateOf(false) }
     var displayDetails by remember { mutableStateOf(false) }
-    var setsInput by remember { mutableStateOf("") }
-    var repsInput by remember { mutableStateOf("") }
-    var timeInput by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf("") }
 
     // Reason: one scrolling list for the whole screen. With a plain Column everything below the
@@ -239,81 +240,31 @@ fun FitnessScreen(
         }
     }
 
-    if (displayInput && selectedExercise != null) {
-        AlertDialog(
-            onDismissRequest = { displayInput = false },
-            title = { Text("Add ${selectedExercise!!.name}") },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        value = setsInput,
-                        onValueChange = { setsInput = it },
-                        label = { Text("Sets") },
-                        modifier = Modifier.fillMaxWidth()
-
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = repsInput,
-                        onValueChange = { repsInput = it },
-                        label = { Text("Reps") },
-                        modifier = Modifier.fillMaxWidth()
-
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = timeInput,
-                        onValueChange = { timeInput = it },
-                        label = { Text("Time (mins)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+    selectedExercise?.takeIf { displayInput }?.let { exercise ->
+        LogExerciseDialog(
+            exercise = exercise,
+            onDismiss = {
+                displayInput = false
+                selectedExercise = null
             },
-
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (setsInput.isNotBlank() && repsInput.isNotBlank() && timeInput.isNotBlank()) {
-                            viewModel.addWorkoutItem(
-                                WorkoutItem(
-                                    exercise = selectedExercise!!,
-                                    sets = setsInput.toIntOrNull() ?: 0,
-                                    reps = repsInput.toIntOrNull() ?: 0,
-                                    time = timeInput.toIntOrNull() ?: 0
-                                )
-                            )
-                        }
-
-                        setsInput = ""
-                        repsInput = ""
-                        timeInput = ""
-                        selectedExercise = null
-                        displayInput = false
-                        viewModel.clearExercises()
-                        searchString = ""
-                        selectedFilter = ""
-                    }
-                ) {
-                    Text("Add!")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { displayInput = false }) {
-                    Text("Cancel")
-
-                }
+            onConfirm = { sets, reps, minutes ->
+                viewModel.addWorkoutItem(
+                    WorkoutItem(exercise = exercise, sets = sets, reps = reps, time = minutes)
+                )
+                displayInput = false
+                selectedExercise = null
             }
         )
     }
 
-    if (displayDetails && selectedExercise != null) {
+    selectedExercise?.takeIf { displayDetails }?.let { exercise ->
         AlertDialog(
             onDismissRequest = { displayDetails = false },
-            title = { Text(selectedExercise!!.name) },
+            title = { Text(exercise.name) },
             text = {
                 Column {
                     Text(
-                        text = "Target Muscle: ${selectedExercise!!.target}",
+                        text = "Target Muscle: ${exercise.target}",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -323,17 +274,133 @@ fun FitnessScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold
                     )
-
-                    selectedExercise!!.instructions.forEachIndexed { index, instruction ->
+                    exercise.instructions.forEachIndexed { index, instruction ->
                         Text("${index + 1}. $instruction")
                     }
                 }
             },
             confirmButton = {
                 TextButton(onClick = { displayDetails = false }) {
-                    Text("Cancel")
+                    Text("Close")
                 }
             }
         )
     }
 }
+
+/**
+ * Logs one exercise.
+ *
+ * The old version required sets, reps and time all at once and, if any was blank, closed and
+ * saved nothing without saying so. That contradicted the data too: strength work carries no
+ * time and cardio carries no sets or reps, which is how the engine prescribes them. It now
+ * takes either a sets-and-reps pair or a duration, keeps the fields numeric, and refuses to
+ * close with an explanation rather than silently discarding the entry.
+ */
+@Composable
+private fun LogExerciseDialog(
+    exercise: Exercise,
+    onDismiss: () -> Unit,
+    onConfirm: (sets: Int, reps: Int, minutes: Int) -> Unit
+) {
+    var sets by rememberSaveable { mutableStateOf("") }
+    var reps by rememberSaveable { mutableStateOf("") }
+    var minutes by rememberSaveable { mutableStateOf("") }
+    var showError by rememberSaveable { mutableStateOf(false) }
+
+    val setsValue = sets.toIntOrNull() ?: 0
+    val repsValue = reps.toIntOrNull() ?: 0
+    val minutesValue = minutes.toIntOrNull() ?: 0
+    val hasStrength = setsValue > 0 && repsValue > 0
+    val hasDuration = minutesValue > 0
+    val isValid = hasStrength || hasDuration
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Log ${exercise.name.replaceFirstChar(Char::uppercase)}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Enter sets and reps, or a time for cardio. You do not need both.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    WholeNumberField(
+                        value = sets,
+                        onValueChange = { sets = it; showError = false },
+                        label = "Sets",
+                        modifier = Modifier.weight(1f)
+                    )
+                    WholeNumberField(
+                        value = reps,
+                        onValueChange = { reps = it; showError = false },
+                        label = "Reps",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                WholeNumberField(
+                    value = minutes,
+                    onValueChange = { minutes = it; showError = false },
+                    label = "Time (minutes)",
+                    imeAction = ImeAction.Done,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (showError) {
+                    Text(
+                        text = if (setsValue > 0 || repsValue > 0) {
+                            "Sets and reps go together. Fill in both, or give a time instead."
+                        } else {
+                            "Add sets and reps, or a time, before saving."
+                        },
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (isValid) {
+                        onConfirm(setsValue, repsValue, minutesValue)
+                    } else {
+                        showError = true
+                    }
+                }
+            ) {
+                Text("Log exercise")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+/** A text field that only ever holds digits, with the number keypad up. */
+@Composable
+private fun WholeNumberField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    imeAction: ImeAction = ImeAction.Next
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { entered ->
+            // Reason: the fields were plain text, so letters went in and toIntOrNull() turned
+            // them into a silent zero. Filtering here means the value is always parseable.
+            onValueChange(entered.filter(Char::isDigit).take(MAX_DIGITS))
+        },
+        label = { Text(label) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(
+            keyboardType = KeyboardType.Number,
+            imeAction = imeAction
+        ),
+        modifier = modifier
+    )
+}
+
+private const val MAX_DIGITS = 4

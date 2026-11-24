@@ -111,8 +111,10 @@ class ProfileViewModel(
             dailyCalorieTarget = dailyCalorieTarget.trim(),
             dailyProteinTarget = dailyProteinTarget.trim(),
             dietaryPreference = dietaryPreference.trim(),
-            dietaryRestrictions = dietaryRestrictions.split(",").map(String::trim).filter(String::isNotBlank),
-            availableEquipment = availableEquipment.split(",").map(String::trim).filter(String::isNotBlank)
+            dietaryRestrictions = dietaryRestrictions.split(",")
+                .map(String::trim).filter(String::isNotBlank),
+            availableEquipment = availableEquipment.split(",")
+                .map(String::trim).filter(String::isNotBlank)
         )
 
         _uiState.value = _uiState.value.copy(

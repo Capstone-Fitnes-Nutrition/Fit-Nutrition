@@ -49,11 +49,11 @@ fun NutritionScreen(
     onNavigateToNutritionAnalytics: () -> Unit,
     onNavigateToProfile: () -> Unit
 ) {
-    val recipes by recipeViewModel.recipes.collectAsState()
+    val recipes by recipeViewModel.recipes.collectAsStateWithLifecycle()
     val recommendationState by recommendationViewModel.state.collectAsStateWithLifecycle()
-    val isLoading by recipeViewModel.isLoading.collectAsState()
-    val errorMessage by recipeViewModel.errorMessage.collectAsState()
-    val filters by recipeViewModel.currentFilters.collectAsState()
+    val isLoading by recipeViewModel.isLoading.collectAsStateWithLifecycle()
+    val errorMessage by recipeViewModel.errorMessage.collectAsStateWithLifecycle()
+    val filters by recipeViewModel.currentFilters.collectAsStateWithLifecycle()
 
     // Load recipes on first launch
     LaunchedEffect(Unit) {
