@@ -12,18 +12,43 @@ sealed interface RecommendationUiState {
     data class NeedsProfile(val missingFields: List<String>) : RecommendationUiState
     data class Error(val message: String) : RecommendationUiState
 
-    /** [handledIds] are suggestions the user already logged; [notice] is a one-line status. */
+    /** The states that hold suggestions, so the card can treat meals and workouts alike. */
+    sealed interface Suggestions : RecommendationUiState {
+        val note: String?
+        val handledIds: Set<String>
+        val notice: String?
+
+        /** Dismissed suggestions, newest first, still restorable. */
+        val dismissedIds: List<String>
+
+        /** The newest dismissal while the undo offer is still worth showing. */
+        val undoableId: String?
+    }
+
+    /**
+     * [handledIds] are suggestions the user already logged; [notice] is a one-line status.
+     * [dismissed] keeps what the user turned down so it can be restored, which is why a
+     * dismissal is removed from [items] rather than from the state altogether.
+     */
     data class Meals(
         val items: List<ScoredRecommendation<MealPick>>,
-        val note: String?,
-        val handledIds: Set<String> = emptySet(),
-        val notice: String? = null
-    ) : RecommendationUiState
+        override val note: String?,
+        override val handledIds: Set<String> = emptySet(),
+        override val notice: String? = null,
+        val dismissed: List<ScoredRecommendation<MealPick>> = emptyList(),
+        override val undoableId: String? = null
+    ) : Suggestions {
+        override val dismissedIds: List<String> get() = dismissed.map { it.recommendationId }
+    }
 
     data class Workout(
         val items: List<ScoredRecommendation<PrescribedExercise>>,
-        val note: String?,
-        val handledIds: Set<String> = emptySet(),
-        val notice: String? = null
-    ) : RecommendationUiState
+        override val note: String?,
+        override val handledIds: Set<String> = emptySet(),
+        override val notice: String? = null,
+        val dismissed: List<ScoredRecommendation<PrescribedExercise>> = emptyList(),
+        override val undoableId: String? = null
+    ) : Suggestions {
+        override val dismissedIds: List<String> get() = dismissed.map { it.recommendationId }
+    }
 }

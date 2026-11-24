@@ -3,8 +3,13 @@ package sheridan.dheripu.fitnutrition.model.recommendation
 /** Which recommendation surface produced a suggestion. */
 enum class RecommendationType { MEAL, WORKOUT }
 
-/** What the user did with a suggestion; every action is logged so ranking can learn from it. */
-enum class FeedbackAction { SHOWN, ACCEPTED, DISMISSED, COMPLETED }
+/**
+ * What the user did with a suggestion; every action is logged so ranking can learn from it.
+ *
+ * [RESTORED] undoes a [DISMISSED]: the item stops being hidden and the dismissal's negative
+ * signal is cancelled, so an accidental tap does not quietly bias ranking for good.
+ */
+enum class FeedbackAction { SHOWN, ACCEPTED, DISMISSED, COMPLETED, RESTORED }
 
 /**
  * One feedback event, stored under users/{uid}/recommendationFeedback.
@@ -71,12 +76,39 @@ object PreferenceLearner {
             affinities = totals.mapValues { (_, value) ->
                 value.first / (value.second + PRIOR_EVENTS)
             },
-            dismissedItemIds = events
-                .filter { it.action == FeedbackAction.DISMISSED && it.isRecent(nowMillis) }
-                .map { it.itemId }
-                .toSet()
+            dismissedItemIds = suppressedItemIds(events, nowMillis)
         )
     }
+
+    /**
+     * Items to hide: those whose most recent dismissal is still inside the window and has not
+     * been restored since.
+     *
+     * Reason: judging this per item on the newest dismissal against the newest restore is what
+     * makes an undo work across a reload. Looking only for a DISMISSED event meant a restored
+     * item stayed hidden for the rest of the window however many times the user asked for it
+     * back.
+     *
+     * A restore wins a tie. Two events can carry the same millisecond, and in that case the
+     * user's "bring it back" is the one to honour: the cost of honouring it wrongly is one
+     * unwanted suggestion, against a suggestion the user explicitly asked for staying hidden.
+     */
+    private fun suppressedItemIds(
+        events: List<RecommendationFeedback>,
+        nowMillis: Long
+    ): Set<String> = events
+        .filter { it.action == FeedbackAction.DISMISSED || it.action == FeedbackAction.RESTORED }
+        .groupBy { it.itemId }
+        .filterValues { perItem ->
+            val dismissed = perItem.filter { it.action == FeedbackAction.DISMISSED }
+                .maxByOrNull { it.createdAt }
+                ?: return@filterValues false
+            if (!dismissed.isRecent(nowMillis)) return@filterValues false
+            val restored = perItem.filter { it.action == FeedbackAction.RESTORED }
+                .maxOfOrNull { it.createdAt }
+            restored == null || restored < dismissed.createdAt
+        }
+        .keys
 
     /**
      * True while the dismissal is still inside the suppression window. An event with no
@@ -85,9 +117,11 @@ object PreferenceLearner {
     private fun RecommendationFeedback.isRecent(nowMillis: Long): Boolean =
         createdAt > 0L && nowMillis - createdAt in 0 until DISMISSAL_WINDOW_MILLIS
 
+    // Reason: RESTORED carries +1 so it offsets the -1 the dismissal it undoes contributed.
+    // The pair then averages to roughly neutral rather than leaving a penalty behind.
     private fun signalOf(action: FeedbackAction): Double? = when (action) {
         FeedbackAction.SHOWN -> null
-        FeedbackAction.ACCEPTED, FeedbackAction.COMPLETED -> 1.0
+        FeedbackAction.ACCEPTED, FeedbackAction.COMPLETED, FeedbackAction.RESTORED -> 1.0
         FeedbackAction.DISMISSED -> -1.0
     }
 }

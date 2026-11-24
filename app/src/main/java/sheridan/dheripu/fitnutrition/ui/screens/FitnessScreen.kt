@@ -91,6 +91,8 @@ fun FitnessScreen(
                 onGenerate = { recommendationViewModel.loadWorkout() },
                 onAccept = recommendationViewModel::accept,
                 onDismiss = { recommendationViewModel.dismiss(it) },
+                onRestore = { recommendationViewModel.restore(it) },
+                onDismissUndo = { recommendationViewModel.clearUndo() },
                 onNavigateToProfile = onNavigateToProfile
             )
         }

@@ -89,6 +89,60 @@ class PreferenceLearnerTest {
         assertEquals(emptySet<String>(), profile.dismissedItemIds)
     }
 
+    @Test
+    fun restoringADismissedItemStopsHidingIt() {
+        val profile = PreferenceLearner.build(
+            listOf(
+                event(FeedbackAction.DISMISSED, "7", "pasta", createdAt = NOW - 60_000),
+                event(FeedbackAction.RESTORED, "7", "pasta", createdAt = NOW - 30_000)
+            ),
+            nowMillis = NOW
+        )
+
+        assertEquals(emptySet<String>(), profile.dismissedItemIds)
+    }
+
+    @Test
+    fun dismissingAgainAfterARestoreHidesTheItemOnceMore() {
+        val profile = PreferenceLearner.build(
+            listOf(
+                event(FeedbackAction.DISMISSED, "7", createdAt = NOW - 90_000),
+                event(FeedbackAction.RESTORED, "7", createdAt = NOW - 60_000),
+                event(FeedbackAction.DISMISSED, "7", createdAt = NOW - 30_000)
+            ),
+            nowMillis = NOW
+        )
+
+        assertEquals(setOf("7"), profile.dismissedItemIds)
+    }
+
+    @Test
+    fun aRestoreCancelsTheNegativeSignalOfTheDismissalItUndoes() {
+        val profile = PreferenceLearner.build(
+            listOf(
+                event(FeedbackAction.DISMISSED, "7", "pasta", createdAt = NOW - 60_000),
+                event(FeedbackAction.RESTORED, "7", "pasta", createdAt = NOW - 30_000)
+            ),
+            nowMillis = NOW
+        )
+
+        assertEquals(0.0, profile.affinityFor(listOf("pasta")), 0.0001)
+    }
+
+    @Test
+    fun aRestoreOutsideTheWindowDoesNotResurrectAnExpiredDismissal() {
+        val old = PreferenceLearner.DISMISSAL_WINDOW_MILLIS + 10_000
+        val profile = PreferenceLearner.build(
+            listOf(
+                event(FeedbackAction.DISMISSED, "7", createdAt = NOW - old),
+                event(FeedbackAction.RESTORED, "7", createdAt = NOW - old + 1_000)
+            ),
+            nowMillis = NOW
+        )
+
+        assertEquals(emptySet<String>(), profile.dismissedItemIds)
+    }
+
     private companion object {
         const val NOW = 1_792_944_000_000L
     }

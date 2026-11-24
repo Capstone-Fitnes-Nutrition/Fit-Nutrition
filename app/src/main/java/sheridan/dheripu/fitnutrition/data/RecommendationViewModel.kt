@@ -46,7 +46,17 @@ class RecommendationViewModel(
     private val _state = MutableStateFlow<RecommendationUiState>(RecommendationUiState.Idle)
     val state: StateFlow<RecommendationUiState> = _state.asStateFlow()
 
-    fun loadMeals() = load { userId ->
+    /**
+     * Items dismissed in this session, with when it happened.
+     *
+     * Reason: the feedback log is the durable record, but writing it is a round trip that may
+     * still be in flight — or may have failed — when the user hits refresh. Suppressing locally
+     * as well is what makes a dismissal stick straight away instead of handing back the
+     * suggestion the user just turned down.
+     */
+    private val sessionDismissals = mutableMapOf<String, Long>()
+
+    fun loadMeals() = load { userId, previous ->
         when (val preparation = dataSource.mealContext(userId)) {
             is ContextPreparation.NeedsProfile ->
                 RecommendationUiState.NeedsProfile(preparation.missingFields)
@@ -58,14 +68,15 @@ class RecommendationViewModel(
                 )
                 recordShown(userId, RecommendationType.MEAL, response.recommendations)
                 RecommendationUiState.Meals(
-                    response.recommendations,
-                    noteOf(context.historyNote, null, response)
+                    items = response.recommendations,
+                    note = noteOf(context.historyNote, null, response),
+                    dismissed = (previous as? RecommendationUiState.Meals)?.dismissed.orEmpty()
                 )
             }
         }
     }
 
-    fun loadWorkout() = load { userId ->
+    fun loadWorkout() = load { userId, previous ->
         when (val preparation = dataSource.workoutContext(userId)) {
             is ContextPreparation.NeedsProfile ->
                 RecommendationUiState.NeedsProfile(preparation.missingFields)
@@ -82,8 +93,10 @@ class RecommendationViewModel(
                 recordShown(userId, RecommendationType.WORKOUT, response.recommendations)
                 val fitbitNote = fitbitLevel?.let { "Using today's Fitbit activity level ($it)." }
                 RecommendationUiState.Workout(
-                    response.recommendations,
-                    noteOf(context.historyNote, fitbitNote, response)
+                    items = response.recommendations,
+                    note = noteOf(context.historyNote, fitbitNote, response),
+                    dismissed = (previous as? RecommendationUiState.Workout)?.dismissed
+                        .orEmpty()
                 )
             }
         }
@@ -103,32 +116,94 @@ class RecommendationViewModel(
         }
     }
 
-    /** Hides the suggestion and records the negative feedback with an optional reason. */
+    /**
+     * Hides the suggestion, remembers it so it can be restored, and records the negative
+     * feedback with an optional reason.
+     */
     fun dismiss(recommendationId: String, reason: String = "") {
         val userId = userIdProvider() ?: return
         val (dismissed, type) = when (val current = _state.value) {
             is RecommendationUiState.Meals -> {
-                _state.value = current.copy(items = current.items.filterNot {
-                    it.recommendationId == recommendationId
-                })
-                current.items.firstOrNull { it.recommendationId == recommendationId } to
-                    RecommendationType.MEAL
+                val item = current.items.firstOrNull { it.recommendationId == recommendationId }
+                    ?: return
+                _state.value = current.copy(
+                    items = current.items - item,
+                    dismissed = listOf(item) + current.dismissed,
+                    undoableId = recommendationId,
+                    notice = null
+                )
+                item to RecommendationType.MEAL
             }
             is RecommendationUiState.Workout -> {
-                _state.value = current.copy(items = current.items.filterNot {
-                    it.recommendationId == recommendationId
-                })
-                current.items.firstOrNull { it.recommendationId == recommendationId } to
-                    RecommendationType.WORKOUT
+                val item = current.items.firstOrNull { it.recommendationId == recommendationId }
+                    ?: return
+                _state.value = current.copy(
+                    items = current.items - item,
+                    dismissed = listOf(item) + current.dismissed,
+                    undoableId = recommendationId,
+                    notice = null
+                )
+                item to RecommendationType.WORKOUT
             }
             else -> return
         }
-        dismissed ?: return
+        sessionDismissals[dismissed.itemId] = clock()
         viewModelScope.launch {
             attempt {
                 dataSource.recordFeedback(
                     userId, listOf(event(dismissed, type, FeedbackAction.DISMISSED, reason))
                 )
+            }
+        }
+    }
+
+    /**
+     * Puts a dismissed suggestion back in the list and clears its suppression, so the next
+     * refresh can offer it again. Logged as [FeedbackAction.RESTORED] so the undo outlives this
+     * session and cancels the dismissal's negative signal.
+     */
+    fun restore(recommendationId: String) {
+        val userId = userIdProvider() ?: return
+        val (restored, type) = when (val current = _state.value) {
+            is RecommendationUiState.Meals -> {
+                val item = current.dismissed
+                    .firstOrNull { it.recommendationId == recommendationId } ?: return
+                _state.value = current.copy(
+                    items = (current.items + item).sortedByDescending { it.score.total },
+                    dismissed = current.dismissed - item,
+                    undoableId = current.undoableId.takeIf { it != recommendationId }
+                )
+                item to RecommendationType.MEAL
+            }
+            is RecommendationUiState.Workout -> {
+                val item = current.dismissed
+                    .firstOrNull { it.recommendationId == recommendationId } ?: return
+                _state.value = current.copy(
+                    items = (current.items + item).sortedByDescending { it.score.total },
+                    dismissed = current.dismissed - item,
+                    undoableId = current.undoableId.takeIf { it != recommendationId }
+                )
+                item to RecommendationType.WORKOUT
+            }
+            else -> return
+        }
+        sessionDismissals.remove(restored.itemId)
+        viewModelScope.launch {
+            attempt {
+                dataSource.recordFeedback(
+                    userId, listOf(event(restored, type, FeedbackAction.RESTORED))
+                )
+            }
+        }
+    }
+
+    /** Drops the undo offer without restoring anything. */
+    fun clearUndo() {
+        _state.update { state ->
+            when (state) {
+                is RecommendationUiState.Meals -> state.copy(undoableId = null)
+                is RecommendationUiState.Workout -> state.copy(undoableId = null)
+                else -> state
             }
         }
     }
@@ -206,16 +281,22 @@ class RecommendationViewModel(
         }
     }
 
-    private fun load(block: suspend (String) -> RecommendationUiState) {
+    /**
+     * Runs a load, handing the block the state it replaces. Reason: the state is set to Loading
+     * before the block runs, so a block that needs what was on screen — the dismissed list it
+     * must carry over — cannot read it back off the flow.
+     */
+    private fun load(block: suspend (String, RecommendationUiState) -> RecommendationUiState) {
         val userId = userIdProvider()
         if (userId == null) {
             _state.value = RecommendationUiState.SignedOut
             return
         }
+        val previous = _state.value
         _state.value = RecommendationUiState.Loading
         viewModelScope.launch {
             _state.value = try {
-                block(userId)
+                block(userId, previous)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -244,8 +325,21 @@ class RecommendationViewModel(
         return loaded.flatten()
     }
 
-    private suspend fun preferencesFor(userId: String): UserPreferenceProfile =
-        PreferenceLearner.build(attempt { dataSource.recentFeedback(userId) }.orEmpty(), clock())
+    /**
+     * The learned profile, widened by the dismissals made in this session. Expired session
+     * entries are dropped first, so the local set suppresses for the same window as the log.
+     */
+    private suspend fun preferencesFor(userId: String): UserPreferenceProfile {
+        val now = clock()
+        sessionDismissals.entries
+            .removeAll { now - it.value >= PreferenceLearner.DISMISSAL_WINDOW_MILLIS }
+        val learned = PreferenceLearner.build(
+            attempt { dataSource.recentFeedback(userId) }.orEmpty(), now
+        )
+        return learned.copy(
+            dismissedItemIds = learned.dismissedItemIds + sessionDismissals.keys
+        )
+    }
 
     private suspend fun recordShown(
         userId: String,
