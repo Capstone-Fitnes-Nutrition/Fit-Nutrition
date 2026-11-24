@@ -47,6 +47,59 @@ internal object MealRules {
     val all = listOf(hasNutrition, matchesPreference, respectsRestrictions)
 
     /**
+     * The restrictions the user typed, mapped onto the fixed vocabulary Spoonacular accepts for
+     * its `intolerances` parameter.
+     *
+     * Reason: the hard filter runs locally over one page of results, so a page that is mostly
+     * dairy leaves almost nothing to rank. Excluding server side means the page comes back
+     * usable in the first place. Anything outside the vocabulary is dropped here and still
+     * caught by [respectsRestrictions] locally.
+     */
+    fun spoonacularIntolerances(restrictions: List<String>): List<String> = restrictions
+        .filter(String::isNotBlank)
+        .mapNotNull { intoleranceVocabulary[singular(it)] }
+        .distinct()
+
+    private val intoleranceVocabulary = mapOf(
+        "dairy" to "Dairy", "milk" to "Dairy", "lactose" to "Dairy",
+        "egg" to "Egg",
+        "gluten" to "Gluten",
+        "grain" to "Grain",
+        "peanut" to "Peanut",
+        "seafood" to "Seafood", "fish" to "Seafood",
+        "sesame" to "Sesame",
+        "shellfish" to "Shellfish",
+        "soy" to "Soy", "soya" to "Soy",
+        "sulfite" to "Sulfite", "sulphite" to "Sulfite",
+        "tree nut" to "Tree Nut", "nut" to "Tree Nut",
+        "wheat" to "Wheat"
+    )
+
+    /**
+     * Explains that the dietary rules dropped [blockedCount] of the recipes that came back.
+     * Without this the filters are invisible and a short list looks like a bug.
+     */
+    fun dietaryLockMessage(context: MealRecommendationContext, blockedCount: Int): String {
+        val reasons = buildList {
+            context.dietaryPreference
+                ?.takeIf { it.isNotBlank() && !it.equals(NO_PREFERENCE, ignoreCase = true) }
+                ?.let { add("your $it preference") }
+            context.dietaryRestrictions.filter(String::isNotBlank)
+                .takeIf { it.isNotEmpty() }
+                ?.let { add("what you avoid (${it.joinToString(", ")})") }
+        }
+        val noun = if (blockedCount == 1) "recipe" else "recipes"
+        return if (reasons.isEmpty()) {
+            val verb = if (blockedCount == 1) "was" else "were"
+            "$blockedCount $noun had no calorie data and $verb skipped."
+        } else {
+            "$blockedCount $noun did not fit ${reasons.joinToString(" or ")}."
+        }
+    }
+
+    const val NO_PREFERENCE = "No preference"
+
+    /**
      * BR1: the calorie and protein target for the next meal. Uses the profile targets, or a
      * goal-based default, and never aims above what is left of today's calories.
      */

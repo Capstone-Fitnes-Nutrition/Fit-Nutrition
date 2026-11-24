@@ -25,7 +25,12 @@ internal object WorkoutRules {
     private const val INTERMEDIATE_PREREQUISITE_WORKOUTS = 3
 
     val hasEquipment = WorkoutFilter { context, exercise ->
-        val owned = context.availableEquipment.map(::singular)
+        // Reason: a blank entry in the user's equipment list used to defeat the whole filter,
+        // because needed.contains("") is always true, so every barbell exercise passed for a
+        // user who owns nothing. Blank and one-character entries are dropped before matching.
+        val owned = context.availableEquipment
+            .map(::singular)
+            .filter { it.length > 1 }
         val needed = exercise.equipment.lowercase()
         needed.isBlank() || needed == "body weight" ||
             owned.any { it.contains("gym") || it == "all" } ||

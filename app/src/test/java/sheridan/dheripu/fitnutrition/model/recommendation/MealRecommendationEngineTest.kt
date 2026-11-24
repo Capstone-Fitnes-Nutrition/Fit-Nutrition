@@ -119,7 +119,8 @@ class MealRecommendationEngineTest {
         val result = engine.recommend(context(), listOf(noNutrition), UserPreferenceProfile(), NOW)
 
         assertTrue(result.recommendations.isEmpty())
-        assertTrue(result.rationale.contains("No recipes"))
+        // The rationale now names what was dropped and why, rather than only that nothing matched.
+        assertEquals("1 recipe had no calorie data and was skipped.", result.rationale)
     }
 
     @Test
@@ -146,6 +147,66 @@ class MealRecommendationEngineTest {
         dietaryRestrictions = restrictions,
         recentMeals = recentMeals
     )
+
+    @Test
+    fun `a repeat is spotted by recipe id even when the logged name differs`() {
+        val eatenYesterday = MealHistoryItem(
+            name = "leftover pasta",
+            calories = 600,
+            proteinGrams = 40.0,
+            loggedAtEpochMillis = NOW - DAY,
+            recipeId = 1
+        )
+        val candidates = listOf(
+            recipe(1, "Creamy Tomato Pasta"),
+            recipe(2, "Creamy Tomato Pasta Variant")
+        )
+
+        val result = engine.recommend(
+            context(recentMeals = listOf(eatenYesterday)), candidates,
+            UserPreferenceProfile(), NOW
+        )
+
+        // Recipe 1 was eaten yesterday under another name, so the one not eaten ranks first.
+        assertEquals(2, result.recommendations.first().item.recipe.id)
+    }
+
+    @Test
+    fun `recipes with no dish type are not collapsed into a single slot`() {
+        // Reason: grouping on the first dish type put every untyped recipe in one "" group, and
+        // the cap of one per group threw all but one of them away.
+        val candidates = (1..3).map { recipe(it, "Recipe $it", dishTypes = emptyList()) }
+
+        val result = engine.recommend(context(), candidates, UserPreferenceProfile(), NOW)
+
+        assertEquals(3, result.recommendations.size)
+    }
+
+    @Test
+    fun `the advisory says how many recipes the dietary rules removed`() {
+        val context = context(preference = "Vegan", restrictions = listOf("Peanuts"))
+        val candidates = listOf(
+            recipe(1, "Peanut Stew", diets = listOf("vegan"), ingredients = listOf("peanut")),
+            recipe(2, "Chicken Plate", ingredients = listOf("chicken")),
+            recipe(3, "Tofu Bowl", diets = listOf("vegan"))
+        )
+
+        val result = engine.recommend(context, candidates, UserPreferenceProfile(), NOW)
+
+        assertEquals(listOf(3), result.recommendations.map { it.item.recipe.id })
+        val advisory = result.advisory
+        assertTrue("advisory was null", advisory != null)
+        assertTrue(advisory.orEmpty(), advisory.orEmpty().contains("2 recipes"))
+    }
+
+    @Test
+    fun `a duplicate recipe in the candidate page is only offered once`() {
+        val candidates = listOf(recipe(1, "Soup"), recipe(1, "Soup"), recipe(2, "Stew"))
+
+        val result = engine.recommend(context(), candidates, UserPreferenceProfile(), NOW)
+
+        assertEquals(listOf(1, 2), result.recommendations.map { it.item.recipe.id }.sorted())
+    }
 
     private fun recipe(
         id: Int,

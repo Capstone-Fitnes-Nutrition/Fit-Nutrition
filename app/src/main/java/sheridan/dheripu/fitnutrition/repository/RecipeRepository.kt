@@ -27,7 +27,8 @@ class RecipeRepository {
             diet = filters.diet,
             intolerances = filters.intolerances.joinToCsv(),
             includeIngredients = filters.includeIngredients.joinToCsv(),
-            excludeIngredients = filters.excludeIngredients.joinToCsv()
+            excludeIngredients = filters.excludeIngredients.joinToCsv(),
+            offset = filters.offset
         )
         if (!response.isSuccessful) {
             throw RecipeApiException(response.failureMessage())

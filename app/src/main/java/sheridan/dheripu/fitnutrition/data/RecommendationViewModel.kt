@@ -19,6 +19,7 @@ import sheridan.dheripu.fitnutrition.model.WorkoutItem
 import sheridan.dheripu.fitnutrition.model.recommendation.FeedbackAction
 import sheridan.dheripu.fitnutrition.model.recommendation.MealPick
 import sheridan.dheripu.fitnutrition.model.recommendation.MealRecommendationEngine
+import sheridan.dheripu.fitnutrition.model.recommendation.MealRules
 import sheridan.dheripu.fitnutrition.model.recommendation.PreferenceLearner
 import sheridan.dheripu.fitnutrition.model.recommendation.PrescribedExercise
 import sheridan.dheripu.fitnutrition.model.recommendation.RecommendationFeedback
@@ -30,6 +31,7 @@ import sheridan.dheripu.fitnutrition.model.recommendation.WorkoutTargetPlanner
 import sheridan.dheripu.fitnutrition.repository.FirebaseRecommendationDataSource
 import sheridan.dheripu.fitnutrition.repository.RecommendationDataException
 import sheridan.dheripu.fitnutrition.repository.RecommendationDataSource
+import java.time.ZoneId
 
 /**
  * Runs the recommendation pipeline: context, candidates, learned preferences, engine ranking,
@@ -56,6 +58,9 @@ class RecommendationViewModel(
      */
     private val sessionDismissals = mutableMapOf<String, Long>()
 
+    /** Which page of recipes to ask for next, so refreshing widens the pool. */
+    private var mealPage = 0
+
     fun loadMeals() = load { userId, previous ->
         when (val preparation = dataSource.mealContext(userId)) {
             is ContextPreparation.NeedsProfile ->
@@ -63,6 +68,7 @@ class RecommendationViewModel(
             is ContextPreparation.Ready -> {
                 val context = preparation.value.context
                 val candidates = dataSource.recipeCandidates(filtersFor(context))
+                mealPage = (mealPage + 1) % RECIPE_PAGES
                 val response = mealEngine.recommend(
                     context, candidates, preferencesFor(userId), clock()
                 )
@@ -368,13 +374,31 @@ class RecommendationViewModel(
         createdAt = clock()
     )
 
+    /**
+     * What to ask Spoonacular for.
+     *
+     * Reason: only the diet was being sent, so the restrictions and the calorie target were
+     * enforced locally over whatever single page came back. A page of dairy recipes for a
+     * dairy-free user left nothing to rank and the card said no recipes matched. Excluding
+     * server side keeps the page usable; the local filters stay as the backstop.
+     *
+     * The offset advances per load so a refresh sees candidates it has not already ranked,
+     * rather than re-ranking one page and returning the same three suggestions.
+     */
     private fun filtersFor(context: MealRecommendationContext): RecipeFilters {
         val preference = context.dietaryPreference.orEmpty().trim()
         val diet = when {
-            preference.isBlank() || preference.equals("No preference", ignoreCase = true) -> null
+            preference.isBlank() ||
+                preference.equals(MealRules.NO_PREFERENCE, ignoreCase = true) -> null
             else -> preference.lowercase().replace("-", " ")
         }
-        return RecipeFilters(diet = diet)
+        val mealCalories = MealRules.targets(context, clock(), ZoneId.systemDefault()).calories
+        return RecipeFilters(
+            maxCalories = mealCalories * CALORIE_HEADROOM,
+            diet = diet,
+            intolerances = MealRules.spoonacularIntolerances(context.dietaryRestrictions),
+            offset = mealPage * RECIPE_PAGE_SIZE
+        )
     }
 
     private fun noteOf(
@@ -399,5 +423,10 @@ class RecommendationViewModel(
 
     private companion object {
         const val TOTAL_SCORE = "total"
+
+        /** A meal target is a floor, not a ceiling; allow headroom so the pool is not starved. */
+        const val CALORIE_HEADROOM = 2
+        const val RECIPE_PAGE_SIZE = 20
+        const val RECIPE_PAGES = 5
     }
 }

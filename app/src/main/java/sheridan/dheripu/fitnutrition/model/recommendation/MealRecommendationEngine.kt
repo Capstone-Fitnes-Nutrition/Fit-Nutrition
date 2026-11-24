@@ -32,23 +32,36 @@ class MealRecommendationEngine(
         nowMillis: Long
     ): RecommendationResponse<ScoredRecommendation<MealPick>> {
         val targets = MealRules.targets(context, nowMillis, zone)
-        val eligible = candidates
+        val offered = candidates
+            .distinctBy { it.id }
             .filterNot { it.id.toString() in preferences.dismissedItemIds }
-            .filter { recipe -> MealRules.all.all { it.keep(context, recipe) } }
+        val eligible = offered.filter { recipe -> MealRules.all.all { it.keep(context, recipe) } }
+        // Reason: the workout card already names what its filters removed. Saying the same here
+        // is what separates "your profile excluded most of this page" from a broken search.
+        val advisory = (offered.size - eligible.size)
+            .takeIf { it > 0 }
+            ?.let { MealRules.dietaryLockMessage(context, it) }
         if (eligible.isEmpty()) {
             return RecommendationResponse(
                 recommendations = emptyList(),
-                rationale = "No recipes matched your dietary needs and preferences."
+                rationale = advisory
+                    ?: "No recipes matched your dietary needs and preferences."
             )
         }
         val ranked = eligible.map { score(context, it, targets, preferences, nowMillis) }.ranked()
+        // Reason: grouping by dish type with no fallback put every recipe Spoonacular sent
+        // without one into a single "" group, where a cap of one per group threw all but one of
+        // them away. A recipe with no dish type is now its own group.
         val picks = pickVaried(ranked, MAX_RESULTS, maxPerGroup = 1) {
-            it.item.recipe.dishTypes.firstOrNull().orEmpty()
+            it.item.recipe.dishTypes.firstOrNull()?.lowercase()
+                ?.takeIf(String::isNotBlank)
+                ?: "untyped-${it.itemId}"
         }
         return RecommendationResponse(
             recommendations = picks,
             rationale = "Ranked ${eligible.size} of ${candidates.size} recipes for a " +
-                "${targets.calories} kcal meal."
+                "${targets.calories} kcal meal.",
+            advisory = advisory
         )
     }
 
@@ -100,8 +113,14 @@ class MealRecommendationEngine(
         recipe: Recipe,
         nowMillis: Long
     ): Double {
+        // Reason: matching on the title alone missed a repeat whenever the logged name differed
+        // at all from the recipe title. The recipe id is the reliable match; the title is the
+        // fallback for meals the user typed in by hand.
         val lastEaten = context.recentMeals
-            .filter { it.name.equals(recipe.title, ignoreCase = true) }
+            .filter {
+                (it.recipeId != 0 && it.recipeId == recipe.id) ||
+                    it.name.equals(recipe.title, ignoreCase = true)
+            }
             .maxOfOrNull { it.loggedAtEpochMillis } ?: return 1.0
         val age = nowMillis - lastEaten
         return when {

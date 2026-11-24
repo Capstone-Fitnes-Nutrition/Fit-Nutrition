@@ -15,7 +15,9 @@ data class MealHistoryItem(
     val name: String,
     val calories: Int,
     val proteinGrams: Double,
-    val loggedAtEpochMillis: Long
+    val loggedAtEpochMillis: Long,
+    /** 0 when the meal was logged by hand rather than from a recipe. */
+    val recipeId: Int = 0
 )
 
 data class WorkoutRecommendationContext(
@@ -108,7 +110,13 @@ object RecommendationContextFactory {
             dietaryRestrictions = profile.dietaryRestrictions,
             recentMeals = history.sortedByDescending { it.loggedAt }
                 .take(MAX_HISTORY_ITEMS).map {
-                MealHistoryItem(it.mealName, it.calories, it.proteinGrams, it.loggedAt)
+                MealHistoryItem(
+                    name = it.mealName,
+                    calories = it.calories,
+                    proteinGrams = it.proteinGrams,
+                    loggedAtEpochMillis = it.loggedAt,
+                    recipeId = it.recipeId
+                )
             },
             historyNote = historyWarning ?: history.takeIf { it.isEmpty() }
                 ?.let { "No meal history yet; use profile preferences and targets only." }
