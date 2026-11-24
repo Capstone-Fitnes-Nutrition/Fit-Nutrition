@@ -11,7 +11,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -25,20 +24,17 @@ fun WearableScreen(padding: Modifier = Modifier) {
     val viewModel: HealthViewModel = viewModel()
     val context = LocalContext.current
 
-    val isAuthenticated by viewModel.isAuthenticated.collectAsState()
-    val healthMetrics by viewModel.healthMetrics.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
-    val errorMessage by viewModel.errorMessage.collectAsState()
+    val isAuthenticated by viewModel.isAuthenticated.collectAsStateWithLifecycle()
+    val healthMetrics by viewModel.healthMetrics.collectAsStateWithLifecycle()
+    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+    val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
+    val useMockData by viewModel.useMockData.collectAsStateWithLifecycle()
     val alerts by viewModel.alerts.collectAsStateWithLifecycle()
     val weeklyMetrics by viewModel.weeklyMetrics.collectAsStateWithLifecycle()
 
-    // Check authentication on first load
-    LaunchedEffect(Unit) {
-        viewModel.checkAuthentication()
-        if (isAuthenticated) {
-            viewModel.fetchHealthMetrics()
-        }
-    }
+    // Reason: checkAuthentication already syncs when connected. The old version also read
+    // isAuthenticated, which is still false at first composition, so the branch never ran.
+    LaunchedEffect(Unit) { viewModel.checkAuthentication() }
 
     Column(
         modifier = padding
@@ -59,7 +55,7 @@ fun WearableScreen(padding: Modifier = Modifier) {
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
-                containerColor = if (isAuthenticated) Color(0xFFE8F5E9) else Color(0xFFFFF3E0)
+                containerColor = if (isAuthenticated) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.tertiaryContainer
             )
         ) {
             Row(
@@ -78,14 +74,14 @@ fun WearableScreen(padding: Modifier = Modifier) {
                     Text(
                         text = if (isAuthenticated) "Syncing health data" else "Login to sync your data",
                         fontSize = 12.sp,
-                        color = Color.Gray,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 4.dp)
                     )
                 }
                 Icon(
                     imageVector = if (isAuthenticated) Icons.Default.CheckCircle else Icons.Default.Warning,
                     contentDescription = null,
-                    tint = if (isAuthenticated) Color.Green else Color(0xFFFF9800),
+                    tint = if (isAuthenticated) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary,
                     modifier = Modifier.size(32.dp)
                 )
             }
@@ -95,7 +91,7 @@ fun WearableScreen(padding: Modifier = Modifier) {
         errorMessage?.let { error ->
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE))
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
             ) {
                 Row(
                     modifier = Modifier
@@ -106,12 +102,12 @@ fun WearableScreen(padding: Modifier = Modifier) {
                 ) {
                     Text(
                         text = error,
-                        color = Color.Red,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
                         fontSize = 14.sp,
                         modifier = Modifier.weight(1f)
                     )
                     IconButton(onClick = { viewModel.clearError() }) {
-                        Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = Color.Red)
+                        Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = MaterialTheme.colorScheme.onErrorContainer)
                     }
                 }
             }
@@ -121,13 +117,20 @@ fun WearableScreen(padding: Modifier = Modifier) {
             HealthAlertsSection(alerts)
         }
 
+        MockDataToggle(
+            enabled = useMockData,
+            onToggle = { viewModel.setUseMockData(it) }
+        )
+
         // Authentication Section
         if (!isAuthenticated) {
             LoginSection(
+                configured = viewModel.isFitbitConfigured,
                 onLoginClick = {
                     val authUrl = viewModel.getAuthorizationUrl()
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl))
-                    context.startActivity(intent)
+                    if (authUrl.isNotBlank()) {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(authUrl)))
+                    }
                 }
             )
         } else {
@@ -152,11 +155,47 @@ fun WearableScreen(padding: Modifier = Modifier) {
     }
 }
 
+/**
+ * Switches the Health tab between a real Fitbit account and the offline mock, so the metrics,
+ * the alerts and the health-driven recommendations can be demonstrated without a watch.
+ */
 @Composable
-private fun LoginSection(onLoginClick: () -> Unit) {
+private fun MockDataToggle(
+    enabled: Boolean,
+    onToggle: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Use sample health data", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(
+                    text = if (enabled) {
+                        "Showing seven days of generated metrics. No Fitbit account needed."
+                    } else {
+                        "Turn on to try the Health tab without a Fitbit account or a watch."
+                    },
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+            Switch(checked = enabled, onCheckedChange = onToggle)
+        }
+    }
+}
+
+@Composable
+private fun LoginSection(configured: Boolean, onLoginClick: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD))
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
     ) {
         Column(
             modifier = Modifier
@@ -179,15 +218,24 @@ private fun LoginSection(onLoginClick: () -> Unit) {
             Text(
                 text = "Login with your Fitbit account to track steps, heart rate, calories, distance, and sleep data",
                 fontSize = 14.sp,
-                color = Color.Gray
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Button(
                 onClick = onLoginClick,
+                enabled = configured,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(Icons.Default.Login, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Login with Fitbit")
+            }
+            if (!configured) {
+                Text(
+                    text = "Fitbit is not configured. Add FITBIT_CLIENT_ID and " +
+                        "FITBIT_CLIENT_SECRET to local.properties, or switch on sample data.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.error
+                )
             }
         }
     }
@@ -199,7 +247,7 @@ private fun LoadingSection() {
         modifier = Modifier
             .fillMaxWidth()
             .height(200.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -210,7 +258,7 @@ private fun LoadingSection() {
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 CircularProgressIndicator()
-                Text("Syncing with Fitbit...", color = Color.Gray)
+                Text("Syncing with Fitbit...", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -321,7 +369,7 @@ private fun HealthMetricsSection(
         // Last Sync Info
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
             Row(
                 modifier = Modifier
@@ -331,7 +379,7 @@ private fun HealthMetricsSection(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("Last Sync", fontSize = 12.sp, color = Color.Gray)
+                    Text("Last Sync", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(
                         text = metrics.lastSyncTime.ifEmpty { "Just now" },
                         fontSize = 14.sp,
@@ -341,7 +389,7 @@ private fun HealthMetricsSection(
                 Icon(
                     imageVector = Icons.Default.CloudDone,
                     contentDescription = null,
-                    tint = Color.Green
+                    tint = MaterialTheme.colorScheme.primary
                 )
             }
         }
@@ -358,7 +406,7 @@ private fun MetricCard(
 ) {
     Card(
         modifier = modifier.height(120.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
@@ -369,7 +417,7 @@ private fun MetricCard(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(icon, fontSize = 28.sp)
-            Text(title, fontSize = 12.sp, color = Color.Gray)
+            Text(title, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(
                 verticalAlignment = Alignment.Bottom,
                 horizontalArrangement = Arrangement.Center
@@ -383,7 +431,7 @@ private fun MetricCard(
                     Text(
                         " $unit",
                         fontSize = 12.sp,
-                        color = Color.Gray,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 2.dp)
                     )
                 }
@@ -398,7 +446,7 @@ private fun EmptyMetricsSection(onFetch: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .height(200.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Column(
             modifier = Modifier
@@ -411,10 +459,10 @@ private fun EmptyMetricsSection(onFetch: () -> Unit) {
                 imageVector = Icons.Default.CloudOff,
                 contentDescription = null,
                 modifier = Modifier.size(48.dp),
-                tint = Color.Gray
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(16.dp))
-            Text("No data available", fontSize = 16.sp, color = Color.Gray)
+            Text("No data available", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = onFetch) {
                 Text("Fetch Data")

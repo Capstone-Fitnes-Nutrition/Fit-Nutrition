@@ -2,453 +2,299 @@ package sheridan.dheripu.fitnutrition.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.net.Uri
 import android.util.Base64
 import android.util.Log
 import kotlinx.coroutines.CancellationException
+import retrofit2.Response
 import sheridan.dheripu.fitnutrition.BuildConfig
-import sheridan.dheripu.fitnutrition.model.FitbitAuthResponse
 import sheridan.dheripu.fitnutrition.model.HealthMetrics
-import java.text.SimpleDateFormat
-import java.util.*
+import sheridan.dheripu.fitnutrition.model.health.ActivityLevel
+import java.security.SecureRandom
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 /**
- * Service class to handle all Fitbit API interactions
- * Manages authentication, token storage, and data fetching
+ * The real Fitbit account: OAuth 2.0, token storage and refresh, and the daily activity, heart
+ * rate and sleep reads.
+ *
+ * Nothing here logs a token, a code or the client secret. Fitbit's token response carries live
+ * credentials, and logcat is readable by the user and by anything with log access on the device.
  */
-class FitbitService(private val context: Context) {
+class FitbitService(
+    context: Context,
+    private val api: FitbitApiService = FitbitRetrofitClient.api,
+    private val zone: ZoneId = ZoneId.systemDefault(),
+    private val clock: () -> Long = System::currentTimeMillis
+) : FitbitDataSource {
 
     private val prefs: SharedPreferences =
         context.getSharedPreferences("fitbit_prefs", Context.MODE_PRIVATE)
 
-    private val api = FitbitRetrofitClient.api
-    private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-
-    // Fetch credentials from BuildConfig (local.properties)
     private val clientId = BuildConfig.FITBIT_CLIENT_ID
     private val clientSecret = BuildConfig.FITBIT_CLIENT_SECRET
     private val redirectUri = BuildConfig.FITBIT_REDIRECT_URI
 
-    companion object {
-        private const val TAG = "FitbitService"
-        private const val KEY_ACCESS_TOKEN = "access_token"
-        private const val KEY_REFRESH_TOKEN = "refresh_token"
-        private const val KEY_USER_ID = "user_id"
-        private const val KEY_TOKEN_EXPIRES_AT = "token_expires_at"
-    }
-
-    init {
-        Log.d(TAG, "FitbitService initialized")
-        Log.d(TAG, "Client ID: ${clientId.take(5)}...")
-        Log.d(TAG, "Redirect URI: $redirectUri")
-    }
+    override val isConfigured: Boolean
+        get() = clientId.isNotBlank() && clientSecret.isNotBlank() && redirectUri.isNotBlank()
 
     /**
-     * Check for user valid authentication token
+     * True while the stored access token is still good. The skew stops a token that expires in
+     * the next minute from being used for a call that would then come back 401.
      */
-    fun isUserAuthenticated(): Boolean {
-        val token = getAccessToken()
-        val expiresAt = prefs.getLong(KEY_TOKEN_EXPIRES_AT, 0)
-        val now = System.currentTimeMillis()
-        val isValid = token != null && now < expiresAt
-
-        Log.d(TAG, "isUserAuthenticated check:")
-        Log.d(TAG, "  Has token: ${token != null}")
-        Log.d(TAG, "  Token expires at: ${Date(expiresAt)}")
-        Log.d(TAG, "  Current time: ${Date(now)}")
-        Log.d(TAG, "  Is valid: $isValid")
-
-        return isValid
-    }
+    fun hasValidAccessToken(): Boolean =
+        accessToken() != null && clock() < prefs.getLong(KEY_TOKEN_EXPIRES_AT, 0) - EXPIRY_SKEW
 
     /**
-     * Generate Fitbit OAuth auth URL
+     * True when tokens are stored, even if the access token has expired; the refresh token can
+     * still renew the session.
      */
-    fun generateAuthorizationUrl(): String {
-        val url = "https://www.fitbit.com/oauth2/authorize?" +
-                "client_id=$clientId&" +
-                "response_type=code&" +
-                "scope=activity+heartrate+profile+sleep+nutrition+weight&" +
-                "redirect_uri=$redirectUri"
+    fun hasStoredSession(): Boolean =
+        accessToken() != null && refreshToken() != null
 
-        Log.d(TAG, "Generated authorization URL")
-        Log.d(TAG, "Full URL: $url")
-
-        return url
-    }
+    override fun isConnected(): Boolean = hasValidAccessToken() || hasStoredSession()
 
     /**
-     * Generate Basic Authorization header
-     * Format: "Basic Base64(client_id:client_secret)"
+     * The Fitbit consent URL. A fresh `state` is generated and stored on every call;
+     * [completeAuthorization] rejects a redirect that does not carry it back, which is what
+     * stops another app from feeding us an authorization code of its own.
      */
-    private fun getBasicAuthHeader(): String {
-        val credentials = "$clientId:$clientSecret"
-        val encodedCredentials = Base64.encodeToString(
-            credentials.toByteArray(Charsets.UTF_8),
-            Base64.NO_WRAP
-        )
-        val header = "Basic $encodedCredentials"
-
-        Log.d(TAG, "Generated Basic Auth header")
-        Log.d(TAG, "Credentials format: client_id:client_secret")
-        Log.d(TAG, "Header: Basic ${encodedCredentials.take(20)}...")
-
-        return header
+    override fun authorizationUrl(): String {
+        if (!isConfigured) return ""
+        val state = newState()
+        prefs.edit().putString(KEY_AUTH_STATE, state).apply()
+        return Uri.parse(AUTHORIZE_URL).buildUpon()
+            .appendQueryParameter("client_id", clientId)
+            .appendQueryParameter("response_type", "code")
+            .appendQueryParameter("scope", SCOPES)
+            .appendQueryParameter("redirect_uri", redirectUri)
+            .appendQueryParameter("state", state)
+            .build()
+            .toString()
     }
 
-    /**
-     * Exchange authorization code for access token
-     */
-    suspend fun exchangeCodeForToken(code: String): Result<FitbitAuthResponse> {
-        Log.d(TAG, "========== TOKEN EXCHANGE START ==========")
-        Log.d(TAG, "Code: ${code.take(10)}...")
-        Log.d(TAG, "Client ID: ${clientId.take(5)}...")
-        Log.d(TAG, "Redirect URI: $redirectUri")
-
+    override suspend fun completeAuthorization(code: String, state: String?): Result<Unit> {
+        if (!isConfigured) return Result.failure(Exception(NOT_CONFIGURED))
+        val expected = prefs.getString(KEY_AUTH_STATE, null)
+        if (expected == null || state != expected) {
+            Log.w(TAG, "Rejecting Fitbit redirect: state did not match")
+            return Result.failure(
+                Exception("Could not verify the Fitbit sign-in. Start the connection again.")
+            )
+        }
+        prefs.edit().remove(KEY_AUTH_STATE).apply()
         return try {
-            val basicAuthHeader = getBasicAuthHeader()
-
-            Log.d(TAG, "Making API call to exchange code for token...")
-            Log.d(TAG, "Using Basic Authorization header")
-
             val response = api.getAccessToken(
-                basicAuth = basicAuthHeader,
+                basicAuth = basicAuthHeader(),
                 clientId = clientId,
                 code = code,
                 grantType = "authorization_code",
                 redirectUri = redirectUri
             )
-
-            Log.d(TAG, "API Response received:")
-            Log.d(TAG, "  Response code: ${response.code()}")
-            Log.d(TAG, "  Response message: ${response.message()}")
-            Log.d(TAG, "  Is successful: ${response.isSuccessful}")
-
-            if (response.isSuccessful && response.body() != null) {
-                val authResponse = response.body()!!
-
-                Log.d(TAG, "✅ TOKEN EXCHANGE SUCCESS!")
-                Log.d(TAG, "  Access Token: ${authResponse.accessToken.take(10)}...")
-                Log.d(TAG, "  Refresh Token: ${authResponse.refreshToken.take(10)}...")
-                Log.d(TAG, "  User ID: ${authResponse.userId}")
-                Log.d(TAG, "  Expires in: ${authResponse.expiresIn} seconds")
-                Log.d(TAG, "  Token type: ${authResponse.tokenType}")
-                Log.d(TAG, "  Scope: ${authResponse.scope}")
-
-                saveTokens(
-                    accessToken = authResponse.accessToken,
-                    refreshToken = authResponse.refreshToken,
-                    userId = authResponse.userId,
-                    expiresIn = authResponse.expiresIn
-                )
-
-                Log.d(TAG, "Tokens saved to SharedPreferences")
-                Log.d(TAG, "========== TOKEN EXCHANGE END ==========")
-
-                Result.success(authResponse)
+            val body = response.body()
+            if (response.isSuccessful && body != null) {
+                saveTokens(body.accessToken, body.refreshToken, body.userId, body.expiresIn)
+                Result.success(Unit)
             } else {
-                val errorBody = response.errorBody()?.string()
-                Log.e(TAG, "❌ TOKEN EXCHANGE FAILED!")
-                Log.e(TAG, "  Response code: ${response.code()}")
-                Log.e(TAG, "  Response message: ${response.message()}")
-                Log.e(TAG, "  Error body: $errorBody")
-                Log.d(TAG, "========== TOKEN EXCHANGE END ==========")
-
-                Result.failure(
-                    Exception("Authentication failed: ${response.code()} - ${response.message()}")
-                )
+                apiError(response, "Could not connect your Fitbit account")
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ TOKEN EXCHANGE EXCEPTION!", e)
-            Log.e(TAG, "Exception: ${e.javaClass.simpleName}")
-            Log.e(TAG, "Message: ${e.message}")
-            Log.e(TAG, "Stack trace:", e)
-            Log.d(TAG, "========== TOKEN EXCHANGE END ==========")
-
-            Result.failure(Exception("Network error during authentication: ${e.message}", e))
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.e(TAG, "Fitbit token exchange failed", error)
+            Result.failure(Exception("Network error while connecting Fitbit.", error))
         }
     }
 
     /**
-     * Fetch daily activity summary (steps, distance, calories, active minutes)
-     */
-    suspend fun fetchDailyActivity(): Result<HealthMetrics> {
-        Log.d(TAG, "========== FETCH DAILY ACTIVITY START ==========")
-
-        val token = getAccessToken()
-        if (token == null) {
-            Log.e(TAG, "❌ No access token found!")
-            Log.d(TAG, "========== FETCH DAILY ACTIVITY END ==========")
-            return Result.failure(Exception("Not authenticated"))
-        }
-
-        val today = dateFormat.format(Date())
-        Log.d(TAG, "Fetching activity for date: $today")
-        Log.d(TAG, "Using token: ${token.take(10)}...")
-
-        return try {
-            Log.d(TAG, "Making API call to Fitbit...")
-            val response = api.getDailyActivitySummary(today, "Bearer $token")
-
-            Log.d(TAG, "API Response received:")
-            Log.d(TAG, "  Response code: ${response.code()}")
-            Log.d(TAG, "  Response message: ${response.message()}")
-            Log.d(TAG, "  Is successful: ${response.isSuccessful}")
-
-            if (response.isSuccessful && response.body() != null) {
-                val data = response.body()!!
-                val summary = data.summary
-
-                Log.d(TAG, "✅ ACTIVITY DATA RECEIVED!")
-                Log.d(TAG, "  Steps: ${summary?.steps}")
-                Log.d(TAG, "  Distances count: ${summary?.distances?.size}")
-                Log.d(TAG, "  First distance: ${summary?.distances?.firstOrNull()?.distance}")
-                Log.d(TAG, "  Calories: ${summary?.caloriesOut}")
-                Log.d(TAG, "  Very Active Minutes: ${summary?.veryActiveMinutes}")
-                Log.d(TAG, "  Fairly Active Minutes: ${summary?.fairlyActiveMinutes}")
-
-                val metrics = HealthMetrics(
-                    date = today,
-                    steps = summary?.steps ?: 0,
-                    distance = summary?.distances?.firstOrNull()?.distance ?: 0.0,
-                    calories = summary?.caloriesOut ?: 0,
-                    activeMinutes = (summary?.veryActiveMinutes ?: 0) +
-                            (summary?.fairlyActiveMinutes ?: 0),
-                    heartRate = 0, // Will be fetched separately
-                    lastSyncTime = "",
-                    activityLevel = "UNKNOWN"
-                )
-
-                Log.d(TAG, "Metrics object created: $metrics")
-                Log.d(TAG, "========== FETCH DAILY ACTIVITY END ==========")
-                Result.success(metrics)
-            } else {
-                val errorBody = response.errorBody()?.string()
-                Log.e(TAG, "❌ ACTIVITY FETCH FAILED!")
-                Log.e(TAG, "  Response code: ${response.code()}")
-                Log.e(TAG, "  Error body: $errorBody")
-                Log.d(TAG, "========== FETCH DAILY ACTIVITY END ==========")
-
-                handleApiError(response.code(), "Failed to fetch activity data")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ ACTIVITY FETCH EXCEPTION!", e)
-            Log.e(TAG, "Message: ${e.message}")
-            Log.d(TAG, "========== FETCH DAILY ACTIVITY END ==========")
-
-            Result.failure(Exception("Network error fetching activity: ${e.message}", e))
-        }
-    }
-
-    /**
-     * Fetch heart rate data
-     */
-    suspend fun fetchHeartRateData(): Result<Int> {
-        Log.d(TAG, "========== FETCH HEART RATE START ==========")
-
-        val token = getAccessToken()
-        if (token == null) {
-            Log.e(TAG, "❌ No access token found!")
-            Log.d(TAG, "========== FETCH HEART RATE END ==========")
-            return Result.failure(Exception("Not authenticated"))
-        }
-
-        val today = dateFormat.format(Date())
-        Log.d(TAG, "Fetching heart rate for date: $today")
-
-        return try {
-            Log.d(TAG, "Making API call to Fitbit...")
-            val response = api.getHeartRateData(today, "Bearer $token")
-
-            Log.d(TAG, "API Response received:")
-            Log.d(TAG, "  Response code: ${response.code()}")
-            Log.d(TAG, "  Is successful: ${response.isSuccessful}")
-
-            if (response.isSuccessful && response.body() != null) {
-                val heartRateData = response.body()!!
-                val restingHeartRate = heartRateData.activitiesHeart
-                    ?.firstOrNull()
-                    ?.value
-                    ?.restingHeartRate ?: 0
-
-                Log.d(TAG, "✅ HEART RATE RECEIVED: $restingHeartRate bpm")
-                Log.d(TAG, "========== FETCH HEART RATE END ==========")
-
-                Result.success(restingHeartRate)
-            } else {
-                val errorBody = response.errorBody()?.string()
-                Log.e(TAG, "❌ HEART RATE FETCH FAILED!")
-                Log.e(TAG, "  Error body: $errorBody")
-                Log.d(TAG, "========== FETCH HEART RATE END ==========")
-
-                handleApiError(response.code(), "Failed to fetch heart rate")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ HEART RATE FETCH EXCEPTION!", e)
-            Log.e(TAG, "Message: ${e.message}")
-            Log.d(TAG, "========== FETCH HEART RATE END ==========")
-
-            Result.failure(Exception("Network error fetching heart rate: ${e.message}", e))
-        }
-    }
-
-    /**
-     * Fetch sleep data (optional - for future use)
-     */
-    suspend fun fetchSleepData(): Result<Int> {
-        Log.d(TAG, "========== FETCH SLEEP DATA START ==========")
-
-        val token = getAccessToken()
-        if (token == null) {
-            Log.e(TAG, "❌ No access token found!")
-            Log.d(TAG, "========== FETCH SLEEP DATA END ==========")
-            return Result.failure(Exception("Not authenticated"))
-        }
-
-        val today = dateFormat.format(Date())
-        Log.d(TAG, "Fetching sleep for date: $today")
-
-        return try {
-            val response = api.getSleepData(today, "Bearer $token")
-
-            Log.d(TAG, "API Response received:")
-            Log.d(TAG, "  Response code: ${response.code()}")
-
-            if (response.isSuccessful && response.body() != null) {
-                val sleepData = response.body()!!
-                val totalMinutesAsleep = sleepData.summary?.totalMinutesAsleep?.toInt() ?: 0
-
-                Log.d(TAG, "✅ SLEEP DATA RECEIVED: $totalMinutesAsleep minutes")
-                Log.d(TAG, "========== FETCH SLEEP DATA END ==========")
-
-                Result.success(totalMinutesAsleep)
-            } else {
-                Log.e(TAG, "❌ SLEEP FETCH FAILED!")
-                Log.d(TAG, "========== FETCH SLEEP DATA END ==========")
-                handleApiError(response.code(), "Failed to fetch sleep data")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ SLEEP FETCH EXCEPTION!", e)
-            Log.d(TAG, "========== FETCH SLEEP DATA END ==========")
-            Result.failure(Exception("Network error fetching sleep: ${e.message}", e))
-        }
-    }
-
-    /**
-     * True when tokens are stored, even if the access token has expired; the refresh token
-     * can still renew the session.
-     */
-    fun hasStoredSession(): Boolean =
-        getAccessToken() != null && prefs.getString(KEY_REFRESH_TOKEN, null) != null
-
-    /**
-     * Renews the access token when it has expired. Fitbit refresh tokens are single use, so
-     * the new pair replaces the stored one.
+     * Renews the access token when it has expired. Fitbit refresh tokens are single use, so the
+     * new pair replaces the stored one.
      */
     suspend fun ensureFreshToken(): Result<Unit> {
-        if (isUserAuthenticated()) return Result.success(Unit)
-        val refreshToken = prefs.getString(KEY_REFRESH_TOKEN, null)
-            ?: return Result.failure(Exception("Unauthorized: Please login again"))
+        if (!isConfigured) return Result.failure(Exception(NOT_CONFIGURED))
+        if (hasValidAccessToken()) return Result.success(Unit)
+        val refreshToken = refreshToken()
+            ?: return Result.failure(Exception(SESSION_EXPIRED))
 
         return try {
             val response = api.refreshAccessToken(
-                basicAuth = getBasicAuthHeader(),
+                basicAuth = basicAuthHeader(),
                 grantType = "refresh_token",
                 refreshToken = refreshToken
             )
-            val authResponse = response.body()
-            if (response.isSuccessful && authResponse != null) {
-                saveTokens(
-                    accessToken = authResponse.accessToken,
-                    refreshToken = authResponse.refreshToken,
-                    userId = authResponse.userId,
-                    expiresIn = authResponse.expiresIn
-                )
-                Log.d(TAG, "Access token refreshed")
+            val body = response.body()
+            if (response.isSuccessful && body != null) {
+                saveTokens(body.accessToken, body.refreshToken, body.userId, body.expiresIn)
+                Log.d(TAG, "Fitbit access token refreshed")
                 Result.success(Unit)
             } else {
-                handleApiError(response.code(), "Failed to refresh Fitbit session")
+                apiError(response, "Could not refresh your Fitbit session")
             }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.e(TAG, "Token refresh failed", e)
-            Result.failure(Exception("Network error refreshing session: ${e.message}", e))
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.e(TAG, "Fitbit token refresh failed", error)
+            Result.failure(Exception("Network error while refreshing the Fitbit session.", error))
         }
     }
 
     /**
-     * Clear all stored Fitbit user data (logout)
+     * One day of metrics. Activity is required; heart rate and sleep are added when Fitbit has
+     * them, because a watch worn only in the daytime reports no sleep and that is not an error.
      */
-    fun clearFitbitUser() {
-        Log.d(TAG, "Clearing all Fitbit user data from SharedPreferences")
+    override suspend fun fetchDay(date: String): Result<HealthMetrics> {
+        val fresh = ensureFreshToken()
+        fresh.exceptionOrNull()?.let { return Result.failure(it) }
+        val token = accessToken() ?: return Result.failure(Exception(SESSION_EXPIRED))
+        val authHeader = "Bearer $token"
+
+        val activity = try {
+            val response = api.getDailyActivitySummary(date, authHeader)
+            val body = response.body()
+            if (!response.isSuccessful || body == null) {
+                return apiError(response, "Could not fetch your Fitbit activity")
+            }
+            body.summary
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.e(TAG, "Fitbit activity fetch failed", error)
+            return Result.failure(Exception("Network error fetching Fitbit activity.", error))
+        }
+
+        val steps = activity?.steps ?: 0
+        val activeMinutes =
+            (activity?.veryActiveMinutes ?: 0) + (activity?.fairlyActiveMinutes ?: 0)
+        return Result.success(
+            HealthMetrics(
+                date = date,
+                steps = steps,
+                distance = activity?.distances
+                    ?.firstOrNull { it.activity.equals(TOTAL_DISTANCE, ignoreCase = true) }
+                    ?.distance
+                    ?: activity?.distances?.firstOrNull()?.distance
+                    ?: 0.0,
+                calories = activity?.caloriesOut ?: 0,
+                heartRate = restingHeartRate(date, authHeader),
+                activeMinutes = activeMinutes,
+                sleepMinutes = sleepMinutes(date, authHeader),
+                lastSyncTime = syncFormatter.format(LocalDate.now(zone)),
+                activityLevel = ActivityLevel.from(steps, activeMinutes),
+                timestamp = clock()
+            )
+        )
+    }
+
+    /**
+     * The last [days] days. A day Fitbit has nothing for is skipped rather than stored as
+     * zeroes, so the alert rules do not read a gap as a day of no sleep.
+     */
+    override suspend fun fetchRecentDays(days: Int): List<HealthMetrics> {
+        val today = LocalDate.now(zone)
+        return (0 until days).mapNotNull { offset ->
+            fetchDay(dateFormatter.format(today.minusDays(offset.toLong()))).getOrNull()
+                ?.takeIf { it.steps > 0 || it.sleepMinutes > 0 || it.heartRate > 0 }
+        }
+    }
+
+    override fun disconnect() {
         prefs.edit().clear().apply()
-        Log.d(TAG, "User data cleared")
     }
 
-    /**
-     * Get stored access token
-     */
-    private fun getAccessToken(): String? {
-        val token = prefs.getString(KEY_ACCESS_TOKEN, null)
-        Log.d(TAG, "getAccessToken: ${if (token != null) "Token exists (${token.take(10)}...)" else "No token"}")
-        return token
+    /** Null is not an error here: Fitbit omits resting heart rate until it has enough samples. */
+    private suspend fun restingHeartRate(date: String, authHeader: String): Int = try {
+        api.getHeartRateData(date, authHeader).body()
+            ?.activitiesHeart
+            ?.firstOrNull()
+            ?.value
+            ?.restingHeartRate
+            ?: 0
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Exception) {
+        Log.w(TAG, "Fitbit heart rate unavailable for $date: ${error.message}")
+        0
     }
 
-    /**
-     * Save authentication tokens to SharedPreferences
-     */
+    private suspend fun sleepMinutes(date: String, authHeader: String): Int = try {
+        val body = api.getSleepData(date, authHeader).body()
+        body?.summary?.totalMinutesAsleep?.toInt()
+            ?: body?.sleep?.sumOf { it.minutesAsleep }
+            ?: 0
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Exception) {
+        Log.w(TAG, "Fitbit sleep unavailable for $date: ${error.message}")
+        0
+    }
+
+    private fun accessToken(): String? = prefs.getString(KEY_ACCESS_TOKEN, null)
+
+    private fun refreshToken(): String? = prefs.getString(KEY_REFRESH_TOKEN, null)
+
+    private fun basicAuthHeader(): String {
+        val encoded = Base64.encodeToString(
+            "$clientId:$clientSecret".toByteArray(Charsets.UTF_8),
+            Base64.NO_WRAP
+        )
+        return "Basic $encoded"
+    }
+
+    private fun newState(): String {
+        val bytes = ByteArray(STATE_BYTES)
+        SecureRandom().nextBytes(bytes)
+        return Base64.encodeToString(bytes, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+    }
+
     private fun saveTokens(
         accessToken: String,
         refreshToken: String,
         userId: String,
         expiresIn: Long
     ) {
-        val expiresAt = System.currentTimeMillis() + (expiresIn * 1000)
-
-        Log.d(TAG, "Saving tokens to SharedPreferences:")
-        Log.d(TAG, "  Access Token: ${accessToken.take(10)}...")
-        Log.d(TAG, "  Refresh Token: ${refreshToken.take(10)}...")
-        Log.d(TAG, "  User ID: $userId")
-        Log.d(TAG, "  Expires at: ${Date(expiresAt)}")
-
-        prefs.edit().apply {
-            putString(KEY_ACCESS_TOKEN, accessToken)
-            putString(KEY_REFRESH_TOKEN, refreshToken)
-            putString(KEY_USER_ID, userId)
-            putLong(KEY_TOKEN_EXPIRES_AT, expiresAt)
-            apply()
-        }
-
-        Log.d(TAG, "Tokens saved successfully")
-
-        // Verify save
-        val savedToken = prefs.getString(KEY_ACCESS_TOKEN, null)
-        Log.d(TAG, "Verification - Token retrieved: ${savedToken?.take(10)}...")
+        prefs.edit()
+            .putString(KEY_ACCESS_TOKEN, accessToken)
+            .putString(KEY_REFRESH_TOKEN, refreshToken)
+            .putString(KEY_USER_ID, userId)
+            .putLong(KEY_TOKEN_EXPIRES_AT, clock() + expiresIn * 1_000)
+            .apply()
     }
 
-    /**
-     * Handle API error responses
-     */
-    private fun <T> handleApiError(code: Int, message: String): Result<T> {
-        Log.e(TAG, "API Error - Code: $code, Message: $message")
-
-        return when (code) {
-            401 -> {
-                Log.e(TAG, "401 Unauthorized - Token may be expired or invalid")
-                Result.failure(Exception("Unauthorized: Please login again"))
-            }
-            403 -> {
-                Log.e(TAG, "403 Forbidden - Check API permissions/scopes")
-                Result.failure(Exception("Access forbidden: Check API permissions"))
-            }
-            429 -> {
-                Log.e(TAG, "429 Rate Limit - Too many requests")
-                Result.failure(Exception("Rate limit exceeded: Try again later"))
-            }
-            else -> {
-                Log.e(TAG, "HTTP Error $code")
-                Result.failure(Exception("$message (Error $code)"))
-            }
+    private fun <T> apiError(response: Response<*>, fallback: String): Result<T> {
+        Log.e(TAG, "Fitbit request failed with status ${response.code()}")
+        val message = when (response.code()) {
+            400 -> "Fitbit rejected the request. Check FITBIT_REDIRECT_URI matches your " +
+                "Fitbit app settings."
+            401 -> SESSION_EXPIRED
+            403 -> "Fitbit denied access. Check the scopes on your Fitbit app."
+            429 -> "Fitbit rate limit reached. Try again in an hour."
+            else -> "$fallback (error ${response.code()})."
         }
+        return Result.failure(Exception(message))
+    }
+
+    private val dateFormatter: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE
+
+    private val syncFormatter: DateTimeFormatter =
+        DateTimeFormatter.ofPattern("MMM d, yyyy")
+
+    companion object {
+        private const val TAG = "FitbitService"
+        private const val AUTHORIZE_URL = "https://www.fitbit.com/oauth2/authorize"
+        private const val SCOPES = "activity heartrate profile sleep weight"
+        private const val TOTAL_DISTANCE = "total"
+        private const val STATE_BYTES = 24
+        private const val EXPIRY_SKEW = 60_000L
+        private const val NOT_CONFIGURED =
+            "Fitbit is not configured. Add FITBIT_CLIENT_ID and FITBIT_CLIENT_SECRET to " +
+                "local.properties."
+        private const val SESSION_EXPIRED = "Your Fitbit session expired. Connect again."
+
+        private const val KEY_ACCESS_TOKEN = "access_token"
+        private const val KEY_REFRESH_TOKEN = "refresh_token"
+        private const val KEY_USER_ID = "user_id"
+        private const val KEY_TOKEN_EXPIRES_AT = "token_expires_at"
+        private const val KEY_AUTH_STATE = "auth_state"
     }
 }

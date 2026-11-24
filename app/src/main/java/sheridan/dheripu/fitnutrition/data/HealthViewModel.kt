@@ -1,6 +1,7 @@
 package sheridan.dheripu.fitnutrition.data
 
 import android.app.Application
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -12,20 +13,33 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import sheridan.dheripu.fitnutrition.BuildConfig
 import sheridan.dheripu.fitnutrition.model.HealthMetrics
-import sheridan.dheripu.fitnutrition.model.health.ActivityLevel
 import sheridan.dheripu.fitnutrition.model.health.HealthAlert
 import sheridan.dheripu.fitnutrition.model.health.HealthAlertEvaluator
 import sheridan.dheripu.fitnutrition.repository.HealthRepository
-import java.text.SimpleDateFormat
-import java.util.*
+import java.time.LocalDate
+import java.time.ZoneId
 
 class HealthViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val fitbitService = FitbitService(application.applicationContext)
+    private val settings = application.applicationContext
+        .getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+
+    private val realSource = FitbitService(application.applicationContext)
+    private val mockSource = MockFitbitDataSource()
     private val healthRepository = HealthRepository()
 
-    // State flows for UI
+    private val _useMockData = MutableStateFlow(
+        settings.getBoolean(KEY_USE_MOCK, BuildConfig.USE_MOCK_FITBIT)
+    )
+
+    /** True while the Health tab is reading the offline mock instead of a real Fitbit account. */
+    val useMockData: StateFlow<Boolean> = _useMockData.asStateFlow()
+
+    private val source: FitbitDataSource
+        get() = if (_useMockData.value) mockSource else realSource
+
     private val _isAuthenticated = MutableStateFlow(false)
     val isAuthenticated: StateFlow<Boolean> = _isAuthenticated.asStateFlow()
 
@@ -47,83 +61,81 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
-    companion object {
-        private const val TAG = "HealthViewModel"
-        private const val STOP_TIMEOUT_MILLIS = 5_000L
-    }
+    /** False when no Fitbit credentials are configured, so the UI can say which keys are missing. */
+    val isFitbitConfigured: Boolean get() = source.isConfigured
 
     init {
-        Log.d(TAG, "HealthViewModel initialized")
         observeWeeklyHistory()
         checkAuthentication()
     }
 
     /**
-     * Check if user is connected to Fitbit. An expired access token still counts when a
-     * refresh token is stored, because the next sync renews it.
+     * Whether the Health tab reads the mock or a real account. Kept in SharedPreferences so the
+     * choice survives a restart, and switching resyncs straight away.
      */
-    fun checkAuthentication() {
-        val isAuth = fitbitService.isUserAuthenticated() || fitbitService.hasStoredSession()
-        _isAuthenticated.value = isAuth
-        Log.d(TAG, "checkAuthentication: isAuthenticated = $isAuth")
-
-        if (isAuth) fetchHealthMetrics()
+    fun setUseMockData(enabled: Boolean) {
+        if (_useMockData.value == enabled) return
+        settings.edit().putBoolean(KEY_USE_MOCK, enabled).apply()
+        _useMockData.value = enabled
+        _healthMetrics.value = null
+        _errorMessage.value = null
+        checkAuthentication()
     }
 
     /**
-     * Get Fitbit OAuth authorization URL
+     * Whether the chosen source can serve data. An expired access token still counts when a
+     * refresh token is stored, because the next sync renews it.
      */
-    fun getAuthorizationUrl(): String = fitbitService.generateAuthorizationUrl()
+    fun checkAuthentication() {
+        val connected = source.isConnected()
+        _isAuthenticated.value = connected
+        if (connected) fetchHealthMetrics()
+    }
+
+    fun getAuthorizationUrl(): String = source.authorizationUrl()
 
     /**
-     * Handle OAuth callback with authorization code
-     * IMPORTANT: This must be called from your MainActivity or deep link handler
+     * Finishes the OAuth redirect. [state] comes from the redirect and is checked against the
+     * value the authorization URL was built with.
      */
-    fun handleAuthorizationCode(code: String) {
+    fun handleAuthorizationCode(code: String, state: String?) {
         viewModelScope.launch {
             _isLoading.value = true
             _errorMessage.value = null
-
-            fitbitService.exchangeCodeForToken(code)
+            source.completeAuthorization(code, state)
                 .onSuccess {
                     _isAuthenticated.value = true
-                    _errorMessage.value = "Login successful! Fetching your data..."
-                    fetchHealthMetrics()
-                }.onFailure { exception ->
-                    Log.e(TAG, "Token exchange failed: ${exception.message}", exception)
-                    _errorMessage.value = "Login failed: ${exception.message}"
+                    _errorMessage.value = "Fitbit connected. Syncing your data."
+                    syncRecentDays()
+                }
+                .onFailure { error ->
+                    Log.e(TAG, "Fitbit authorization failed: ${error.message}")
+                    _errorMessage.value = error.message ?: "Could not connect Fitbit."
                     _isAuthenticated.value = false
                 }
-
             _isLoading.value = false
         }
     }
 
-    /**
-     * Sync today's activity, heart rate and sleep from Fitbit, then save the day to history.
-     */
+    /** Syncs today, then backfills the rest of the week in the background. */
     fun fetchHealthMetrics() {
         if (!_isAuthenticated.value) {
-            _errorMessage.value = "Please login to Fitbit first"
+            _errorMessage.value = "Connect Fitbit first."
             return
         }
-
         viewModelScope.launch {
             _isLoading.value = true
             _errorMessage.value = null
             try {
-                val tokenResult = fitbitService.ensureFreshToken()
-                if (tokenResult.isFailure) {
-                    handleSessionExpired()
-                    return@launch
-                }
-                fitbitService.fetchDailyActivity()
-                    .onSuccess { activity -> completeSync(activity) }
-                    .onFailure { exception ->
-                        _errorMessage.value = "Failed to fetch activity data: ${exception.message}"
-                        if (exception.message?.contains("401") == true ||
-                            exception.message?.contains("Unauthorized") == true
-                        ) {
+                source.fetchDay(today())
+                    .onSuccess { metrics ->
+                        _healthMetrics.value = metrics
+                        saveToHistory(metrics)
+                        backfillWeek()
+                    }
+                    .onFailure { error ->
+                        _errorMessage.value = error.message ?: "Could not sync Fitbit."
+                        if (error.message?.contains("expired", ignoreCase = true) == true) {
                             handleSessionExpired()
                         }
                     }
@@ -133,29 +145,31 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    /** Adds heart rate and sleep to today's activity; either may be missing without failing. */
-    private suspend fun completeSync(activity: HealthMetrics) {
-        val warnings = mutableListOf<String>()
-        val heartRate = fitbitService.fetchHeartRateData()
-            .onFailure { warnings += "heart rate" }
-            .getOrDefault(activity.heartRate)
-        val sleepMinutes = fitbitService.fetchSleepData()
-            .onFailure { warnings += "sleep" }
-            .getOrDefault(0)
-
-        val metrics = activity.copy(
-            date = today(),
-            heartRate = heartRate,
-            sleepMinutes = sleepMinutes,
-            lastSyncTime = getCurrentTimeString(),
-            activityLevel = ActivityLevel.from(activity.steps, activity.activeMinutes),
-            timestamp = System.currentTimeMillis()
-        )
-        _healthMetrics.value = metrics
-        if (warnings.isNotEmpty()) {
-            _errorMessage.value = "Could not fetch ${warnings.joinToString(" or ")} data."
+    /** Pulls the last [HISTORY_DAYS] days and stores each one, so the week view has history. */
+    fun syncRecentDays() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                val days = source.fetchRecentDays(HISTORY_DAYS)
+                days.firstOrNull { it.date == today() }?.let { _healthMetrics.value = it }
+                days.forEach { saveToHistory(it) }
+                if (days.isEmpty()) {
+                    _errorMessage.value = "Fitbit has no data for the last week."
+                }
+            } finally {
+                _isLoading.value = false
+            }
         }
-        saveToHistory(metrics)
+    }
+
+    // Reason: today's sync is what the user waits for, so the older days are fetched after it
+    // rather than before, and a failure on them leaves today's numbers on screen.
+    private suspend fun backfillWeek() {
+        val known = _weeklyMetrics.value.map { it.date }.toSet()
+        if (known.size >= HISTORY_DAYS) return
+        source.fetchRecentDays(HISTORY_DAYS)
+            .filterNot { it.date in known }
+            .forEach { saveToHistory(it) }
     }
 
     private suspend fun saveToHistory(metrics: HealthMetrics) {
@@ -173,36 +187,29 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun handleSessionExpired() {
-        Log.w(TAG, "Fitbit session could not be renewed - logging out")
-        fitbitService.clearFitbitUser()
+        source.disconnect()
         _isAuthenticated.value = false
-        _errorMessage.value = "Session expired. Please login again."
+        _errorMessage.value = "Your Fitbit session expired. Connect again."
     }
 
-    /**
-     * Logout from Fitbit and clear all data
-     */
     fun logout() {
-        fitbitService.clearFitbitUser()
+        source.disconnect()
         _isAuthenticated.value = false
         _healthMetrics.value = null
         _errorMessage.value = null
     }
 
-    /**
-     * Clear error message
-     */
     fun clearError() {
         _errorMessage.value = null
     }
 
-    private fun today(): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+    private fun today(): String = LocalDate.now(ZoneId.systemDefault()).toString()
 
-    /**
-     * Get current time as formatted string
-     */
-    private fun getCurrentTimeString(): String {
-        val formatter = SimpleDateFormat("MMM dd, yyyy 'at' hh:mm a", Locale.getDefault())
-        return formatter.format(Date())
+    companion object {
+        private const val TAG = "HealthViewModel"
+        private const val STOP_TIMEOUT_MILLIS = 5_000L
+        private const val HISTORY_DAYS = 7
+        private const val SETTINGS_PREFS = "health_settings"
+        private const val KEY_USE_MOCK = "use_mock_fitbit"
     }
 }

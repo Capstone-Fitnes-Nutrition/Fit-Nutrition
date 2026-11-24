@@ -43,6 +43,11 @@ android {
             "\"${secret("EXERCISE_API_KEY")}\"")
         buildConfigField("String", "EXERCISE_API_HOST",
             "\"${secret("EXERCISE_API_HOST").ifBlank { "exercisedb.p.rapidapi.com" }}\"")
+        // Off by default. Set USE_MOCK_FITBIT=true in local.properties to feed the Health tab
+        // realistic fake daily metrics instead of a real Fitbit account. The Health tab also
+        // has a runtime switch, so testing it needs no rebuild.
+        buildConfigField("boolean", "USE_MOCK_FITBIT",
+            secret("USE_MOCK_FITBIT").equals("true", ignoreCase = true).toString())
     }
 
     buildTypes {

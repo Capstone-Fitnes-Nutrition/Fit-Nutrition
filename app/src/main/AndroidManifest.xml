@@ -24,10 +24,11 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+                <!-- Must match FITBIT_REDIRECT_URI. No android:path, so the documented
+                     fitnutrition://fitbit redirect matches as well as fitnutrition://fitbit/callback. -->
                 <data
                     android:scheme="fitnutrition"
-                    android:host="fitbit"
-                    android:path="/callback" />
+                    android:host="fitbit" />
             </intent-filter>
 
         </activity>

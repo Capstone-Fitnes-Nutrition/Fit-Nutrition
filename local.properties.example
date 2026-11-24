@@ -18,3 +18,9 @@ EXERCISE_API_HOST=
 FITBIT_CLIENT_ID=
 FITBIT_CLIENT_SECRET=
 FITBIT_REDIRECT_URI=fitnutrition://fitbit
+
+# Optional testing switch. true feeds the Health tab deterministic fake daily metrics
+# (steps, distance, calories, active minutes, resting heart rate, sleep) for the last 7+ days,
+# so the health alerts and the health-driven recommendations work with no Fitbit account and no
+# watch. Defaults to false. The Health tab has an equivalent runtime switch.
+USE_MOCK_FITBIT=false

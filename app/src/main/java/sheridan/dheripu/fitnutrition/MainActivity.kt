@@ -33,12 +33,13 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val TAG = "MainActivity"
+        private const val FITBIT_SCHEME = "fitnutrition"
+        private const val FITBIT_HOST = "fitbit"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        Log.d(TAG, "MainActivity onCreate")
         handleFitbitCallback(intent)
 
         setContent {
@@ -50,42 +51,28 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        Log.d(TAG, "MainActivity onNewIntent")
         setIntent(intent)
         handleFitbitCallback(intent)
     }
 
     /**
-     * Handle Fitbit OAuth callback
+     * Finishes the Fitbit OAuth redirect. The URI is not logged: it carries the authorization
+     * code, which is a live credential until it is exchanged.
      */
     private fun handleFitbitCallback(intent: Intent?) {
-        Log.d(TAG, "========== FITBIT CALLBACK HANDLER ==========")
         val data: Uri? = intent?.data
+        if (data == null || data.scheme != FITBIT_SCHEME || data.host != FITBIT_HOST) return
 
-        if (data != null) {
-            Log.d(TAG, "Intent data URI: $data")
-
-            if (data.scheme == "fitnutrition" && data.host == "fitbit") {
-                Log.d(TAG, "✅ Fitbit callback detected!")
-
-                val code = data.getQueryParameter("code")
-                val error = data.getQueryParameter("error")
-
-                when {
-                    code != null -> {
-                        Log.d(TAG, "✅ Authorization code received, processing...")
-                        healthViewModel.handleAuthorizationCode(code)
-                    }
-                    error != null -> {
-                        Log.e(TAG, "❌ OAuth error: $error")
-                    }
-                    else -> {
-                        Log.w(TAG, "⚠️ Callback received but no code or error found")
-                    }
-                }
-            }
+        val code = data.getQueryParameter("code")
+        val error = data.getQueryParameter("error")
+        when {
+            code != null -> healthViewModel.handleAuthorizationCode(
+                code = code,
+                state = data.getQueryParameter("state")
+            )
+            error != null -> Log.w(TAG, "Fitbit returned an OAuth error: $error")
+            else -> Log.w(TAG, "Fitbit callback carried neither a code nor an error")
         }
-        Log.d(TAG, "========== FITBIT CALLBACK HANDLER END ==========")
     }
 }
 
