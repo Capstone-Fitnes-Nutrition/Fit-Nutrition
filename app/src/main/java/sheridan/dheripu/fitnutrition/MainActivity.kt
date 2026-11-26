@@ -223,6 +223,7 @@ fun MainAppScreen(
             is NavigationItem.Fitness -> {
                 FitnessScreen(
                     padding = Modifier.padding(innerPadding),
+                    onNavigateToWorkoutAnalytics = onNavigateToWorkoutAnalytics,
                     onNavigateToProfile = { currentRoute = NavigationItem.Profile.route }
                 )
             }

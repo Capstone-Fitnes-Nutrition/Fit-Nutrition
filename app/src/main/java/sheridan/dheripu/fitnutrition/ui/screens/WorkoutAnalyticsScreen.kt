@@ -1,13 +1,19 @@
 package sheridan.dheripu.fitnutrition.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -24,61 +30,69 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import sheridan.dheripu.fitnutrition.AuthManager
 import sheridan.dheripu.fitnutrition.data.FitnessViewModel
-import sheridan.dheripu.fitnutrition.data.StepsViewModel
+import sheridan.dheripu.fitnutrition.data.StepsUiState
 import sheridan.dheripu.fitnutrition.model.WorkoutItem
-import sheridan.dheripu.fitnutrition.model.analytics.WorkoutAnalytics
-import sheridan.dheripu.fitnutrition.model.analytics.StepAnalyticsFactory
-import sheridan.dheripu.fitnutrition.model.analytics.WorkoutAnalyticsFactory
+import sheridan.dheripu.fitnutrition.repository.StepEntry
+import sheridan.dheripu.fitnutrition.repository.dateKey
 import sheridan.dheripu.fitnutrition.ui.components.InfoCard
 import sheridan.dheripu.fitnutrition.ui.components.ScreenHeader
 import java.text.SimpleDateFormat
-import java.util.Date
+import java.util.Calendar
 import java.util.Locale
+import kotlin.collections.find
+
+
+// estimate value
+private const val CALORIES_PER_MINUTE = 5
+
+data class WorkoutStats(
+    val totalWorkouts: Int,
+    val totalMinutes: Int,
+    val avgMinutes: Int,
+    val totalCalories: Int,
+    val previousMinutes: Int,
+    val topMuscles: List<Pair<String, Int>>,
+    val topExercises: List<Pair<String, Int>>,
+)
+
+ data class DaySteps(val dayStart: Long, val steps:Int)
+
+ data class StepsStats(
+    val days: List<DaySteps>,
+    val total: Int,
+    val average: Int,
+    val max: Int
+)
 
 @Composable
 fun WorkoutAnalyticsScreen(
     onBackClick: () -> Unit,
-    fitnessViewModel: FitnessViewModel = viewModel(),
-    stepsViewModel: StepsViewModel = viewModel()
+    fitnessViewModel: FitnessViewModel = viewModel(key = AuthManager.currentUser?.uid ?: "guest")
 ) {
     BackHandler { onBackClick() }
 
-    // Reason: steps are loaded when the screen opens so the totals reflect anything just entered
-    // on the Fitness tab.
-    LaunchedEffect(Unit) { stepsViewModel.load() }
+    val workouts = fitnessViewModel.myWorkouts.value
+    val stepsState = fitnessViewModel.stepsState
 
-    var selectedTab by remember { mutableStateOf(0) }
+    var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Weekly", "Monthly")
-    val daysInPeriod = if (selectedTab == 0) 7 else 30
+    val days = if (selectedTab == 0) 7 else 30
 
-    val workouts by fitnessViewModel.myWorkouts
-    val isLoading by fitnessViewModel.isLoadingWorkouts
-    val errorMessage by fitnessViewModel.workoutsError
+    LaunchedEffect(Unit) { fitnessViewModel.loadSteps() }
 
-    val workoutsInPeriod = remember(workouts, daysInPeriod) {
-        WorkoutAnalyticsFactory.withinPeriod(workouts, daysInPeriod)
-    }
-    val analytics = remember(workouts, daysInPeriod) {
-        WorkoutAnalyticsFactory.from(workouts, daysInPeriod)
-    }
-
-    val stepsState by stepsViewModel.state.collectAsStateWithLifecycle()
-    val stepsInPeriod = remember(stepsState.entries, daysInPeriod) {
-        StepAnalyticsFactory.withinPeriod(stepsState.entries, daysInPeriod)
-    }
-    val stepAnalytics = remember(stepsState.entries, daysInPeriod) {
-        StepAnalyticsFactory.from(stepsState.entries, daysInPeriod)
-    }
+    val workoutStats = remember(workouts, days) { buildWorkoutStats(workouts, days) }
+    val stepsStats = remember(stepsState.entries, days) { buildStepsStats(stepsState.entries, days) }
 
     Column(
         modifier = Modifier
@@ -88,6 +102,7 @@ fun WorkoutAnalyticsScreen(
     ) {
         IconButton(onClick = onBackClick) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+
         }
 
         ScreenHeader(
@@ -99,143 +114,160 @@ fun WorkoutAnalyticsScreen(
             tabs.forEachIndexed { index, title ->
                 Tab(
                     selected = selectedTab == index,
-                    onClick = { selectedTab = index },
-                    text = { Text(title) }
+                    onClick = {selectedTab = index},
+                    text = {Text(title)}
                 )
             }
         }
 
-        when {
-            isLoading && workouts.isEmpty() -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            WorkoutSection(
+                stats = workoutStats,
+                periodName = if (selectedTab == 0) "week" else "month"
+            )
+            StepsSection(
+                state = stepsState,
+                stats = stepsStats,
+                isWeekly = selectedTab == 0,
+                onRetry = fitnessViewModel::loadSteps
+            )
+        }
+    }
+}
+@Composable
+private fun WorkoutSection(stats: WorkoutStats, periodName: String) {
+    SectionTitle("Quick Stats")
+
+    Row(modifier = Modifier.fillMaxWidth()) {
+        InfoCard("Workouts", "${stats.totalWorkouts}", "total", Modifier.weight(1f))
+        InfoCard("Total Duration", "${stats.totalMinutes}", "min", Modifier.weight(1f))
+    }
+    Row(modifier = Modifier.fillMaxWidth()) {
+        InfoCard("Avg Duration", "${stats.avgMinutes}", "min", Modifier.weight(1f))
+        InfoCard("Calories Burnt", "${stats.totalCalories}", "kcal", Modifier.weight(1f))
+    }
+
+    val trend = trendText(stats.totalMinutes, stats.previousMinutes, periodName)
+    if (trend.isNotEmpty()) {
+        Text(
+            text = trend,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+    }
+
+    SectionTitle("Most trained muscles")
+    CountCard(stats.topMuscles)
+
+    SectionTitle("Most logged exercises")
+    CountCard(stats.topExercises)
+}
+
+@Composable
+private fun CountCard(items: List<Pair<String, Int>>) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            if (items.isEmpty()) {
+                Text("No workouts in this period")
+            } else {
+                items.forEachIndexed { index, (label, count) ->
+                    if (index > 0) Spacer(modifier = Modifier.height(8.dp))
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        Text(label, modifier = Modifier.weight(1f))
+                        Text(
+                            text = if (count == 1) "1 workout" else "$count workouts",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
-
-            errorMessage != null && workouts.isEmpty() -> {
-                WorkoutAnalyticsError(
-                    message = errorMessage ?: "Unable to load workout analytics",
-                    onRetry = fitnessViewModel::loadWorkouts
-                )
-            }
-
-            workoutsInPeriod.isEmpty() -> {
-                Text(
-                    text = "No workouts logged in this period. Add exercises on the " +
-                        "Fitness tab to start tracking.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(24.dp)
-                )
-            }
-
-            else -> {
-                WorkoutAnalyticsContent(
-                    analytics = analytics,
-                    workouts = workoutsInPeriod
-                )
-            }
-        }
-
-        if (!(isLoading && workouts.isEmpty())) {
-            StepAnalyticsSection(
-                analytics = stepAnalytics,
-                entries = stepsInPeriod,
-                error = stepsState.error,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
         }
     }
 }
 
 @Composable
-private fun WorkoutAnalyticsContent(
-    analytics: WorkoutAnalytics,
-    workouts: List<WorkoutItem>
+private fun StepsSection(
+    state: StepsUiState,
+    stats: StepsStats,
+    isWeekly: Boolean,
+    onRetry: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp)
-    ) {
-        Text(
-            text = "Quick Stats",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
+    SectionTitle("Steps")
 
-        Row(modifier = Modifier.fillMaxWidth()) {
-            InfoCard(
-                title = "Workouts",
-                value = analytics.sessions.toString(),
-                unit = "days",
-                modifier = Modifier.weight(1f)
-            )
-            InfoCard(
-                title = "Total Duration",
-                value = analytics.totalMinutes.toString(),
-                unit = "min",
-                modifier = Modifier.weight(1f)
-            )
-        }
-        Row(modifier = Modifier.fillMaxWidth()) {
-            InfoCard(
-                title = "Avg Duration",
-                value = analytics.averageSessionMinutes.toString(),
-                unit = "min / day",
-                modifier = Modifier.weight(1f)
-            )
-            InfoCard(
-                title = "Exercises",
-                value = analytics.exercisesLogged.toString(),
-                unit = "logged",
-                modifier = Modifier.weight(1f)
-            )
-        }
-        Row(modifier = Modifier.fillMaxWidth()) {
-            InfoCard(
-                title = "Sets",
-                value = analytics.totalSets.toString(),
-                unit = "total",
-                modifier = Modifier.weight(1f)
-            )
-            InfoCard(
-                title = "Reps",
-                value = analytics.totalReps.toString(),
-                unit = "total",
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Text(
-            text = "Recent workouts",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-        )
-        workouts.take(5).forEach { item ->
-            Card(
+    when {
+        state.isLoading -> {
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 4.dp)
+                    .height(160.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Row(
+                CircularProgressIndicator()
+            }
+        }
+
+        state.errorMessage != null -> {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(text = state.errorMessage, color = MaterialTheme.colorScheme.error)
+                OutlinedButton(onClick = onRetry, modifier = Modifier.padding(top = 8.dp)) {
+                    Text("Try again")
+                }
+            }
+        }
+
+        else -> {
+            Row(modifier = Modifier.fillMaxWidth()) {
+                InfoCard("Total Steps", "${stats.total}", "steps", Modifier.weight(1f))
+                InfoCard("Avg (logged days)", "${stats.average}", "steps", Modifier.weight(1f))
+            }
+            StepsChart(stats = stats, isWeekly = isWeekly)
+        }
+    }
+}
+
+@Composable
+private fun StepsChart(stats: StepsStats, isWeekly: Boolean) {
+    val weekdayFormat = remember { SimpleDateFormat("E", Locale.getDefault()) }
+    val dayFormat = remember { SimpleDateFormat("d", Locale.getDefault()) }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(160.dp)
+                .padding(12.dp)
+        ) {
+            stats.days.forEachIndexed { index, day ->
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .padding(horizontal = 1.dp),
+                    verticalArrangement = Arrangement.Bottom,
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(item.exercise.name, fontWeight = FontWeight.Medium)
-                        Text(
-                            text = formatWorkoutDate(item.completedAt),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
-                        )
-                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height((day.steps * 100 / stats.max).dp)
+                            .background(MaterialTheme.colorScheme.primary)
+                    )
                     Text(
-                        text = "${item.sets}x${item.reps} · ${item.time} min",
-                        fontWeight = FontWeight.SemiBold
+                        text = when {
+                            isWeekly -> weekdayFormat.format(day.dayStart)
+                            index == 0 || (index + 1) % 5 == 0 -> dayFormat.format(day.dayStart)
+                            else -> " "
+                        },
+                        fontSize = 10.sp,
+                        modifier = Modifier.wrapContentWidth(unbounded = true)
                     )
                 }
             }
@@ -244,24 +276,83 @@ private fun WorkoutAnalyticsContent(
 }
 
 @Composable
-private fun WorkoutAnalyticsError(message: String, onRetry: () -> Unit) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(
-            modifier = Modifier.padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text("Workout analytics unavailable", style = MaterialTheme.typography.titleMedium)
-            Text(
-                text = message,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(top = 8.dp)
-            )
-            OutlinedButton(onClick = onRetry, modifier = Modifier.padding(top = 12.dp)) {
-                Text("Retry")
-            }
-        }
-    }
+private fun SectionTitle(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+    )
+}
+fun buildWorkoutStats(workouts: List<WorkoutItem>, days: Int): WorkoutStats {
+    val windowStart = startOfDayDaysAgo(days - 1)
+    val previousStart = startOfDayDaysAgo(days * 2 - 1)
+
+    val current = workouts.filter { it.completedAt >= windowStart }
+    val previousMinutes = workouts
+        .filter { it.completedAt >= previousStart && it.completedAt < windowStart }
+        .sumOf { it.time }
+    val totalMinutes = current.sumOf { it.time }
+
+    return WorkoutStats(
+        totalWorkouts = current.size,
+        totalMinutes = totalMinutes,
+        avgMinutes = if (current.isEmpty()) 0 else totalMinutes / current.size,
+        totalCalories = totalMinutes * CALORIES_PER_MINUTE,
+        previousMinutes = previousMinutes,
+        topMuscles = current.map { it.exercise.target }.topCounts(),
+        topExercises = current.map { it.exercise.name }.topCounts()
+    )
 }
 
-private fun formatWorkoutDate(timestamp: Long): String =
-    SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()).format(Date(timestamp))
+fun buildStepsStats(entries: List<StepEntry>, days: Int): StepsStats {
+    val firstDay = Calendar.getInstance().apply { timeInMillis = startOfDayDaysAgo(days - 1) }
+
+    val dailySteps = List(days) { i ->
+        val millis = (firstDay.clone() as Calendar)
+            .apply { add(Calendar.DAY_OF_YEAR, i) }
+            .timeInMillis
+        val key = dateKey(millis)
+        DaySteps(millis, entries.find { it.dateKey == key }?.steps ?: 0)
+    }
+
+    val total = dailySteps.sumOf { it.steps }
+    val loggedDays = dailySteps.count { it.steps > 0 }
+
+    return StepsStats(
+        days = dailySteps,
+        total = total,
+        average = if (loggedDays > 0) total / loggedDays else 0,
+        max = maxOf(dailySteps.maxOf { it.steps }, 1)
+    )
+}
+
+private fun List<String>.topCounts(): List<Pair<String, Int>> =
+    filter { it.isNotBlank() }
+        .groupingBy { it }
+        .eachCount()
+        .entries
+        .sortedByDescending { it.value }
+        .take(3)
+        .map { it.key to it.value }
+
+ private fun startOfDayDaysAgo(daysAgo: Int): Long = Calendar.getInstance().run {
+    set(Calendar.HOUR_OF_DAY, 0)
+    set(Calendar.MINUTE, 0)
+    set(Calendar.SECOND, 0)
+    set(Calendar.MILLISECOND, 0)
+    add(Calendar.DAY_OF_YEAR, -daysAgo)
+    timeInMillis
+}
+
+private fun trendText(current: Int, previous: Int, periodName: String): String {
+    if (previous == 0) {
+        return if (current == 0) "" else "No workouts last $periodName to compare."
+    }
+    val percent = (current - previous) * 100 / previous
+    return when {
+        percent > 0 -> "Total duration is up $percent% from last $periodName."
+        percent < 0 -> "Total duration is down ${-percent}% from last $periodName."
+        else -> "Total duration is the same as last $periodName."
+    }
+}

@@ -9,11 +9,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -23,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -40,33 +44,39 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import sheridan.dheripu.fitnutrition.AuthManager
 import sheridan.dheripu.fitnutrition.data.FitnessViewModel
-import sheridan.dheripu.fitnutrition.data.StepsViewModel
+import sheridan.dheripu.fitnutrition.data.RecommendationViewModel
 import sheridan.dheripu.fitnutrition.model.Exercise
 import sheridan.dheripu.fitnutrition.model.WorkoutItem
 import sheridan.dheripu.fitnutrition.ui.components.ScreenHeader
-import sheridan.dheripu.fitnutrition.data.RecommendationViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FitnessScreen(
     padding: Modifier = Modifier,
-    viewModel: FitnessViewModel = viewModel(),
+    // Reason: keyed by user so a sign-out does not leave the previous account's workouts on screen.
+    viewModel: FitnessViewModel = viewModel(key = AuthManager.currentUser?.uid ?: "guest"),
     // Reason: keyed so the workout card does not share state with the meal card on Nutrition.
     recommendationViewModel: RecommendationViewModel = viewModel(key = "workout-recommendations"),
-    stepsViewModel: StepsViewModel = viewModel(),
-    onNavigateToProfile: () -> Unit
+    onNavigateToProfile: () -> Unit,
+    onNavigateToWorkoutAnalytics: () -> Unit
 ) {
     var searchString by remember { mutableStateOf("") }
     val recommendationState by recommendationViewModel.state.collectAsStateWithLifecycle()
-    val stepsState by stepsViewModel.state.collectAsStateWithLifecycle()
     val exercises = viewModel.exercises.value
     val myWorkouts = viewModel.myWorkouts.value
     var selectedExercise by remember { mutableStateOf<Exercise?>(null) }
     var displayInput by remember { mutableStateOf(false) }
     var displayDetails by remember { mutableStateOf(false) }
     var selectedFilter by remember { mutableStateOf("") }
+    var showStepsInput by remember { mutableStateOf(false) }
+    var stepsInput by remember { mutableStateOf("") }
+    var stepsMessage by remember { mutableStateOf("") }
 
     // Reason: one scrolling list for the whole screen. With a plain Column everything below the
     // recommendation card became unreachable once it filled with suggestions.
@@ -99,14 +109,79 @@ fun FitnessScreen(
         }
 
         item {
-            StepEntryCard(
-                state = stepsState,
-                onSave = stepsViewModel::saveSteps,
-                onInputOpened = {
-                    stepsViewModel.consumeMessage()
-                    stepsViewModel.clearError()
+            OutlinedButton(
+                onClick = onNavigateToWorkoutAnalytics,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Insights, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("View Workout Analytics")
+            }
+        }
+
+        item {
+            OutlinedButton(
+                onClick = {
+                    showStepsInput = !showStepsInput
+                    stepsMessage = ""
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.AutoMirrored.Filled.DirectionsWalk, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Enter Steps")
+            }
+        }
+
+        if (showStepsInput) {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = stepsInput,
+                        onValueChange = { entered -> stepsInput = entered.filter(Char::isDigit) },
+                        label = { Text("Steps today") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Button(
+                        onClick = {
+                            val steps = stepsInput.toIntOrNull()
+                            when {
+                                AuthManager.currentUser?.uid == null ->
+                                    stepsMessage = "Sign in to save steps"
+
+                                steps == null -> stepsMessage = "Enter a number"
+
+                                else -> viewModel.saveTodaySteps(
+                                    steps = steps,
+                                    onSuccess = {
+                                        stepsInput = ""
+                                        stepsMessage = "Steps saved"
+                                        showStepsInput = false
+                                    },
+                                    onError = { message -> stepsMessage = message }
+                                )
+                            }
+                        },
+                        modifier = Modifier.align(Alignment.CenterVertically)
+                    ) {
+                        Text("Save")
+                    }
                 }
-            )
+            }
+        }
+
+        if (stepsMessage.isNotEmpty()) {
+            item {
+                Text(
+                    text = stepsMessage,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
         }
 
         item { Row(
@@ -221,17 +296,20 @@ fun FitnessScreen(
             item { Text("No exercises added yet") }
         } else {
             items(
-                myWorkouts,
+                myWorkouts.sortedByDescending { it.completedAt },
                 key = { "${it.exercise.id}-${it.completedAt}" }
             ) { item ->
                 Card(modifier = Modifier.fillMaxWidth()) {
                     ListItem(
                         headlineContent = { Text(item.exercise.name) },
                         supportingContent = {
+                            val loggedOn = SimpleDateFormat("EEE, MMM d", Locale.getDefault())
+                                .format(Date(item.completedAt))
                             Text(
                                 "Target: ${item.exercise.target}\n" +
                                         "Sets: ${item.sets} Reps: " +
-                                        "${item.reps} Time: ${item.time} min"
+                                        "${item.reps} Time: ${item.time} min\n" +
+                                        loggedOn
                             )
                         }
                     )
