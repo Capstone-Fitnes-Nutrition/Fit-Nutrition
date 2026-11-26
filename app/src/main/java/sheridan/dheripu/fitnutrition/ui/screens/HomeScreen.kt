@@ -8,10 +8,18 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import sheridan.dheripu.fitnutrition.AuthManager
+import sheridan.dheripu.fitnutrition.data.FitnessViewModel
+import sheridan.dheripu.fitnutrition.data.ProfileViewModel
 import sheridan.dheripu.fitnutrition.ui.components.InfoCard
 
 @Composable
@@ -20,8 +28,27 @@ fun HomeScreen(
     padding: Modifier,
     onNavigateToNutrition: () -> Unit,
     onNavigateToWorkoutAnalytics: () -> Unit,
-    onNavigateToNutritionAnalytics: () -> Unit
+    onNavigateToNutritionAnalytics: () -> Unit,
+    fitnessViewModel: FitnessViewModel = viewModel(key = AuthManager.currentUser?.uid ?: "guest"),
+    profileViewModel: ProfileViewModel = viewModel()
 ) {
+
+    val profileState by profileViewModel.uiState.collectAsState()
+    val firstName = profileState.profile?.name
+        ?.trim()
+        ?.substringBefore(" ")
+        .orEmpty()
+
+    LaunchedEffect(AuthManager.currentUser?.uid) {profileViewModel.loadProfile()}
+
+    val workouts = fitnessViewModel.myWorkouts.value
+    val stepsState = fitnessViewModel.stepsState
+
+    LaunchedEffect(Unit) { fitnessViewModel.loadSteps() }
+
+    val todayWorkouts = remember(workouts) { buildWorkoutStats(workouts,1 )}
+    val todaySteps = remember(stepsState.entries) { buildStepsStats(stepsState.entries,1 )}
+
     Column(
         modifier = padding
             .fillMaxSize()
@@ -40,7 +67,7 @@ fun HomeScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "Welcome to FitNutrition!",
+                    text = if (firstName.isNotBlank()) "Hi $firstName, Welcome to FitNutrition!" else "Welcome to FitNutrition!",
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -64,14 +91,14 @@ fun HomeScreen(
 
         Row(modifier = Modifier.fillMaxWidth()) {
             InfoCard(
-                title = "Calories",
-                value = "1,850",
+                title = "Calories Out",
+                value = "${todayWorkouts.totalCalories}",
                 unit = "kcal",
                 modifier = Modifier.weight(1f)
             )
             InfoCard(
-                title = "Steps",
-                value = "7,542",
+                title = "Daily Steps",
+                value = "${todaySteps.total}",
                 unit = "steps",
                 modifier = Modifier.weight(1f)
             )
@@ -79,8 +106,8 @@ fun HomeScreen(
 
         Row(modifier = Modifier.fillMaxWidth()) {
             InfoCard(
-                title = "Workout",
-                value = "35",
+                title = "Total Workout Mins",
+                value = "${todayWorkouts.totalMinutes}",
                 unit = "min",
                 modifier = Modifier.weight(1f)
             )

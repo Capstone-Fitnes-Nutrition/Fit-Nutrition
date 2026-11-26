@@ -56,7 +56,7 @@ import kotlin.collections.find
 // estimate value
 private const val CALORIES_PER_MINUTE = 5
 
-private data class WorkoutStats(
+data class WorkoutStats(
     val totalWorkouts: Int,
     val totalMinutes: Int,
     val avgMinutes: Int,
@@ -66,9 +66,9 @@ private data class WorkoutStats(
     val topExercises: List<Pair<String, Int>>,
 )
 
-private data class DaySteps(val dayStart: Long, val steps:Int)
+ data class DaySteps(val dayStart: Long, val steps:Int)
 
-private data class StepsStats(
+ data class StepsStats(
     val days: List<DaySteps>,
     val total: Int,
     val average: Int,
@@ -284,7 +284,7 @@ private fun SectionTitle(text: String) {
         modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
     )
 }
-private fun buildWorkoutStats(workouts: List<WorkoutItem>, days: Int): WorkoutStats {
+fun buildWorkoutStats(workouts: List<WorkoutItem>, days: Int): WorkoutStats {
     val windowStart = startOfDayDaysAgo(days - 1)
     val previousStart = startOfDayDaysAgo(days * 2 - 1)
 
@@ -305,7 +305,7 @@ private fun buildWorkoutStats(workouts: List<WorkoutItem>, days: Int): WorkoutSt
     )
 }
 
-private fun buildStepsStats(entries: List<StepEntry>, days: Int): StepsStats {
+fun buildStepsStats(entries: List<StepEntry>, days: Int): StepsStats {
     val firstDay = Calendar.getInstance().apply { timeInMillis = startOfDayDaysAgo(days - 1) }
 
     val dailySteps = List(days) { i ->
@@ -336,7 +336,7 @@ private fun List<String>.topCounts(): List<Pair<String, Int>> =
         .take(3)
         .map { it.key to it.value }
 
-private fun startOfDayDaysAgo(daysAgo: Int): Long = Calendar.getInstance().run {
+ private fun startOfDayDaysAgo(daysAgo: Int): Long = Calendar.getInstance().run {
     set(Calendar.HOUR_OF_DAY, 0)
     set(Calendar.MINUTE, 0)
     set(Calendar.SECOND, 0)
