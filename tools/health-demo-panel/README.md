@@ -7,13 +7,14 @@ waited for.
 ## Why it exists
 
 The Health tab used to read a Fitbit account through the Fitbit Web API. Google decommissioned
-that API on 30 October 2026, and the app now reads Health Connect instead. Health Connect does
-not exist on an emulator, so the sample-data source is the only one that works there — and a
-source that generates its own deterministic days cannot be steered during a demo.
+that API on 30 October 2026, and the app now reads Health Connect instead. An emulator on
+Android 14 or later has Health Connect and the permission flow works there, but nothing writes
+steps or sleep to it, so a real read comes back empty. The sample-data source is what fills the
+tab — and a source that generates its own deterministic days cannot be steered during a demo.
 
 This panel steers it. `MockHealthDataSource` reads
-`users/{uid}/mock_health/{yyyy-MM-dd}` from the Realtime Database before falling back to the
-generated day, and this page is what writes there.
+`users/{uid}/mockHealth/{yyyy-MM-dd}` from Firestore before falling back to the generated day,
+and this page is what writes there.
 
 ## Running it
 
@@ -24,13 +25,10 @@ python3 -m http.server 8777 --directory tools/health-demo-panel
 Then open <http://localhost:8777>. Serving it beats opening the file directly, because
 Firebase Auth is happier with an http origin.
 
-You need two things to sign in:
-
-- **The Realtime Database URL.** Firebase console, Realtime Database, the URL printed above the
-  data tree. It is saved in the browser afterwards.
-- **The email and password of the account you are demoing.** The same credentials you sign into
-  the app with. The database rules only allow a user to touch their own node, so the panel
-  cannot write to anyone else's.
+Sign in with the email and password of the account you are demoing — the same credentials you
+use in the app. Nothing else to configure: the Firebase project is baked in, and the Firestore
+rules only allow a user to touch documents under their own `users/{uid}`, so the panel cannot
+write to anyone else's.
 
 ## Using it in a demo
 
@@ -58,5 +56,5 @@ If one of those moves in the Kotlin, move it here too. Otherwise the panel promi
 the app will not raise, which is a worse demo than no panel at all.
 
 The Firebase web config in `index.html` is the same public project identifier that ships in
-`app/google-services.json`. A web API key is not a secret; the database rules are what protect
+`app/google-services.json`. A web API key is not a secret; `firestore.rules` is what protects
 the data.

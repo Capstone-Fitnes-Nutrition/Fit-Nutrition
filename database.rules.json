@@ -1,5 +1,5 @@
 {
-  "//": "Realtime Database rules for the daily health metrics at users/{uid}/health_metrics/{yyyy-MM-dd}, the manually entered step counts at users/{uid}/manual_steps/{yyyy-MM-dd} and the demo panel overrides at users/{uid}/mock_health/{yyyy-MM-dd}. All sit under users/$uid, so the per-user read and write rule below already covers them. Publish from the Firebase console: Realtime Database -> Rules, project fitnutrition-aaee1.",
+  "//": "Realtime Database rules, kept only in case an instance is created later. The project has no Realtime Database today: google-services.json carries no firebase_url and the candidate hosts answer 404. All app data lives in Firestore, including the daily health metrics at users/{uid}/healthMetrics/{yyyy-MM-dd} and the demo panel overrides at users/{uid}/mockHealth/{yyyy-MM-dd}; firestore.rules is what covers them.",
   "rules": {
     "users": {
       "$uid": {

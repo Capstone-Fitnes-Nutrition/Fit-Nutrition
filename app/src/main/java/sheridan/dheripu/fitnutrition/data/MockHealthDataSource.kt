@@ -9,8 +9,9 @@ import java.time.format.DateTimeParseException
 
 /**
  * Stands in for Health Connect so the Health tab, the BR4/BR5 alert rules and the
- * health-driven parts of the recommendation engine can be exercised with no watch and no
- * Health Connect provider — which is every emulator.
+ * health-driven parts of the recommendation engine can be exercised with no watch. An
+ * emulator on Android 14 or later does have Health Connect, but nothing writes steps or sleep
+ * to it, so a real read there comes back empty.
  *
  * Always connected and needs no permission. A day the companion control panel has set is
  * served from [overrides]; everything else falls through to the deterministic days in

@@ -21,8 +21,9 @@ EXERCISE_API_HOST=
 
 # Optional testing switch. true feeds the Health tab deterministic fake daily metrics
 # (steps, distance, calories, active minutes, resting heart rate, sleep) for the last 7+ days,
-# so the health alerts and the health-driven recommendations work with no watch and no Health
-# Connect provider, which is every emulator. Defaults to false. The Health tab has an
+# so the health alerts and the health-driven recommendations work with no watch. An emulator
+# on Android 14 or later does have Health Connect, but nothing writes to it there, so the
+# metrics come back empty without this. Defaults to false. The Health tab has an
 # equivalent runtime switch, and the companion demo panel in tools/health-demo-panel can set
 # any day's numbers while the app is running.
 USE_MOCK_HEALTH=false
