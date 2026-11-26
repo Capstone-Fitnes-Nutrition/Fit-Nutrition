@@ -144,7 +144,7 @@ class RecommendationViewModelTest {
     }
 
     @Test
-    fun workoutUsesTodaysFitbitActivityLevel() = runTest(dispatcher) {
+    fun workoutUsesTodaysSyncedActivityLevel() = runTest(dispatcher) {
         source.activityLevel = "SEDENTARY"
         val viewModel = viewModel()
 
@@ -153,7 +153,7 @@ class RecommendationViewModelTest {
 
         val state = viewModel.state.value as RecommendationUiState.Workout
         assertTrue(state.items.all { it.item.exercise.equipment == "body weight" })
-        assertTrue(state.note.orEmpty().contains("Fitbit"))
+        assertTrue(state.note.orEmpty().contains("synced activity level"))
     }
 
     @Test

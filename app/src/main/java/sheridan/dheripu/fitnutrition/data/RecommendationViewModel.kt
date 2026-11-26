@@ -88,19 +88,19 @@ class RecommendationViewModel(
                 RecommendationUiState.NeedsProfile(preparation.missingFields)
             is ContextPreparation.Ready -> {
                 val profileContext = preparation.value.context
-                val fitbitLevel = attempt { dataSource.latestActivityLevel() }
+                val syncedLevel = attempt { dataSource.latestActivityLevel() }
                 val context = profileContext.copy(
-                    activityLevel = fitbitLevel ?: profileContext.activityLevel
+                    activityLevel = syncedLevel ?: profileContext.activityLevel
                 )
                 val candidates = exercisesFor(WorkoutTargetPlanner.bodyPartsFor(context))
                 val response = workoutEngine.recommend(
                     context, candidates, preferencesFor(userId), clock()
                 )
                 recordShown(userId, RecommendationType.WORKOUT, response.recommendations)
-                val fitbitNote = fitbitLevel?.let { "Using today's Fitbit activity level ($it)." }
+                val syncedNote = syncedLevel?.let { "Using today's synced activity level ($it)." }
                 RecommendationUiState.Workout(
                     items = response.recommendations,
-                    note = noteOf(context.historyNote, fitbitNote, response),
+                    note = noteOf(context.historyNote, syncedNote, response),
                     dismissed = (previous as? RecommendationUiState.Workout)?.dismissed
                         .orEmpty()
                 )

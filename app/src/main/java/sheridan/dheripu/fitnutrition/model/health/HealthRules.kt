@@ -20,7 +20,7 @@ data class HealthAlert(val type: HealthAlertType, val title: String, val message
 
 /**
  * BR5: alerts when metrics leave recommended ranges. BR4: alerts after three consecutive
- * nights of poor sleep. A metric of 0 means Fitbit sent no data and never triggers an alert.
+ * nights of poor sleep. A metric of 0 means the source had no data and never triggers an alert.
  */
 object HealthAlertEvaluator {
     private const val HIGH_RESTING_HEART_RATE = 100

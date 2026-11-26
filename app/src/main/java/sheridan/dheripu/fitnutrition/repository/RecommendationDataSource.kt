@@ -30,7 +30,7 @@ interface RecommendationDataSource {
     suspend fun recipeCandidates(filters: RecipeFilters): List<Recipe>
     suspend fun exerciseCandidates(bodyPart: String): List<Exercise>
 
-    /** Today's Fitbit activity level, or null when no Fitbit data was synced today. */
+    /** Today's synced activity level, or null when no health data was synced today. */
     suspend fun latestActivityLevel(): String?
     suspend fun recentFeedback(userId: String): List<RecommendationFeedback>
     suspend fun recordFeedback(userId: String, events: List<RecommendationFeedback>)

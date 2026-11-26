@@ -7,7 +7,7 @@ import kotlin.random.Random
 
 /**
  * Realistic fake daily metrics, so the Health tab, the alert rules and the health-driven parts
- * of the recommendation engine can be exercised without a Fitbit account or a watch.
+ * of the recommendation engine can be exercised without a watch or Health Connect.
  *
  * Deterministic: the same date always produces the same day, so a test can assert on it and a
  * demo looks the same twice. Weekends are more active than weekdays and one day in seven sleeps

@@ -98,7 +98,7 @@ internal object WorkoutRules {
         }
     }
 
-    /** Maps both the profile wording and Fitbit's activity levels onto 1..4. */
+    /** Maps both the profile wording and the synced activity levels onto 1..4. */
     fun activityScore(level: String?): Int {
         val normalized = level.orEmpty().lowercase()
         return when {

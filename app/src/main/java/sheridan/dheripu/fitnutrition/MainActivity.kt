@@ -1,13 +1,9 @@
 package sheridan.dheripu.fitnutrition
 
-import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -21,22 +17,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import sheridan.dheripu.fitnutrition.data.HealthViewModel
 import sheridan.dheripu.fitnutrition.model.NavigationItem
 import sheridan.dheripu.fitnutrition.ui.navigation.BottomNavigationBar
 import sheridan.dheripu.fitnutrition.ui.screens.*
 import sheridan.dheripu.fitnutrition.ui.theme.FitNutritionTheme
 
 class MainActivity : ComponentActivity() {
-
-    private val healthViewModel: HealthViewModel by viewModels()
-
-    companion object {
-        private const val TAG = "MainActivity"
-        private const val FITBIT_SCHEME = "fitnutrition"
-        private const val FITBIT_HOST = "fitbit"
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,44 +31,16 @@ class MainActivity : ComponentActivity() {
         // clear of the system bars and the keyboard.
         enableEdgeToEdge()
 
-        handleFitbitCallback(intent)
-
         setContent {
             FitNutritionTheme {
-                FitNutritionApp(healthViewModel)
+                FitNutritionApp()
             }
-        }
-    }
-
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        handleFitbitCallback(intent)
-    }
-
-    /**
-     * Finishes the Fitbit OAuth redirect. The URI is not logged: it carries the authorization
-     * code, which is a live credential until it is exchanged.
-     */
-    private fun handleFitbitCallback(intent: Intent?) {
-        val data: Uri? = intent?.data
-        if (data == null || data.scheme != FITBIT_SCHEME || data.host != FITBIT_HOST) return
-
-        val code = data.getQueryParameter("code")
-        val error = data.getQueryParameter("error")
-        when {
-            code != null -> healthViewModel.handleAuthorizationCode(
-                code = code,
-                state = data.getQueryParameter("state")
-            )
-            error != null -> Log.w(TAG, "Fitbit returned an OAuth error: $error")
-            else -> Log.w(TAG, "Fitbit callback carried neither a code nor an error")
         }
     }
 }
 
 @Composable
-fun FitNutritionApp(healthViewModel: HealthViewModel) {
+fun FitNutritionApp() {
     var showSplash by remember { mutableStateOf(true) }
     var appState by remember { mutableStateOf<AppState>(AppState.Loading) }
 
@@ -120,7 +78,6 @@ fun FitNutritionApp(healthViewModel: HealthViewModel) {
             }
             AppState.MainApp -> {
                 MainAppScreen(
-                    healthViewModel = healthViewModel,
                     onLogout = {
                         AuthManager.logout()
                         appState = AppState.Auth
@@ -177,7 +134,6 @@ fun AuthNavigation(onAuthSuccess: () -> Unit) {
 
 @Composable
 fun MainAppScreen(
-    healthViewModel: HealthViewModel,
     onNavigateToRecipeDetail: (Int) -> Unit,
     onLogout: () -> Unit,
     onNavigateToWorkoutAnalytics : () -> Unit,
@@ -185,7 +141,6 @@ fun MainAppScreen(
 ) {
 
     var currentRoute by remember { mutableStateOf(NavigationItem.Home.route) }
-    val context = LocalContext.current
 
     val navigationItems = listOf(
         NavigationItem.Home,

@@ -1,7 +1,6 @@
 package sheridan.dheripu.fitnutrition.ui.screens
 
-import android.content.Intent
-import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -14,19 +13,24 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.viewmodel.compose.viewModel
 import sheridan.dheripu.fitnutrition.data.HealthViewModel
 
 @Composable
 fun WearableScreen(padding: Modifier = Modifier) {
     val viewModel: HealthViewModel = viewModel()
-    val context = LocalContext.current
+
+    // Reason: Health Connect grants arrive through an activity result, not a redirect. The
+    // contract takes the set of permissions to ask for and hands back the set granted.
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = PermissionController.createRequestPermissionResultContract()
+    ) { granted -> viewModel.onPermissionResult(granted) }
 
     val isAuthenticated by viewModel.isAuthenticated.collectAsStateWithLifecycle()
     val healthMetrics by viewModel.healthMetrics.collectAsStateWithLifecycle()
@@ -74,7 +78,7 @@ fun WearableScreen(padding: Modifier = Modifier) {
             ) {
                 Column {
                     Text(
-                        text = if (isAuthenticated) "Connected to Fitbit" else "Not connected",
+                        text = if (isAuthenticated) "Reading Health Connect" else "Not connected",
                         style = MaterialTheme.typography.titleMedium
                     )
                     Text(
@@ -141,16 +145,10 @@ fun WearableScreen(padding: Modifier = Modifier) {
             onToggle = { viewModel.setUseMockData(it) }
         )
 
-        // Authentication Section
         if (!isAuthenticated) {
-            LoginSection(
-                configured = viewModel.isFitbitConfigured,
-                onLoginClick = {
-                    val authUrl = viewModel.getAuthorizationUrl()
-                    if (authUrl.isNotBlank()) {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(authUrl)))
-                    }
-                }
+            ConnectSection(
+                available = viewModel.isHealthSourceConfigured,
+                onConnectClick = { permissionLauncher.launch(viewModel.requiredPermissions) }
             )
         } else {
             // Health Metrics Section
@@ -175,8 +173,9 @@ fun WearableScreen(padding: Modifier = Modifier) {
 }
 
 /**
- * Switches the Health tab between a real Fitbit account and the offline mock, so the metrics,
- * the alerts and the health-driven recommendations can be demonstrated without a watch.
+ * Switches the Health tab between Health Connect and the offline mock, so the metrics, the
+ * alerts and the health-driven recommendations can be demonstrated without a watch, and on an
+ * emulator where Health Connect does not exist at all.
  */
 @Composable
 private fun MockDataToggle(
@@ -196,9 +195,10 @@ private fun MockDataToggle(
                 Text("Use sample health data", style = MaterialTheme.typography.titleMedium)
                 Text(
                     text = if (enabled) {
-                        "Showing seven days of generated metrics. No Fitbit account needed."
+                        "Showing seven days of generated metrics. The demo panel can set " +
+                            "any day's numbers."
                     } else {
-                        "Turn on to try the Health tab without a Fitbit account or a watch."
+                        "Turn on to try the Health tab with no watch and no Health Connect."
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -211,7 +211,7 @@ private fun MockDataToggle(
 }
 
 @Composable
-private fun LoginSection(configured: Boolean, onLoginClick: () -> Unit) {
+private fun ConnectSection(available: Boolean, onConnectClick: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -232,25 +232,26 @@ private fun LoginSection(configured: Boolean, onLoginClick: () -> Unit) {
                 tint = MaterialTheme.colorScheme.primary
             )
             Text(
-                text = "Connect your Fitbit",
+                text = "Connect Health Connect",
                 style = MaterialTheme.typography.titleLarge
             )
             Text(
-                text = "Sign in to sync your steps, heart rate, calories, distance and " +
-                    "sleep from Fitbit.",
+                text = "Grant access to read your steps, resting heart rate, calories, " +
+                    "distance and sleep. A Fitbit, Pixel Watch or phone that writes to " +
+                    "Health Connect feeds this the same way.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
             Button(
-                onClick = onLoginClick,
-                enabled = configured,
+                onClick = onConnectClick,
+                enabled = available,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Sign in with Fitbit")
+                Text("Grant access")
             }
-            if (!configured) {
+            if (!available) {
                 Card(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer,
@@ -258,8 +259,8 @@ private fun LoginSection(configured: Boolean, onLoginClick: () -> Unit) {
                     )
                 ) {
                     Text(
-                        text = "Fitbit is not configured. Add FITBIT_CLIENT_ID and " +
-                            "FITBIT_CLIENT_SECRET to local.properties, or switch on sample data.",
+                        text = "Health Connect is not available on this device. Install it " +
+                            "from Play, or switch on sample data above.",
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(12.dp)
                     )
@@ -287,7 +288,7 @@ private fun LoadingSection() {
             ) {
                 CircularProgressIndicator()
                 Text(
-                    "Syncing with Fitbit",
+                    "Reading your health data",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

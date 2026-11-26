@@ -31,23 +31,18 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        buildConfigField("String", "FITBIT_CLIENT_ID",
-            "\"${secret("FITBIT_CLIENT_ID")}\"")
-        buildConfigField("String", "FITBIT_CLIENT_SECRET",
-            "\"${secret("FITBIT_CLIENT_SECRET")}\"")
-        buildConfigField("String", "FITBIT_REDIRECT_URI",
-            "\"${secret("FITBIT_REDIRECT_URI").ifBlank { "fitnutrition://fitbit" }}\"")
         buildConfigField("String", "SPOONACULAR_API_KEY",
             "\"${secret("SPOONACULAR_API_KEY")}\"")
         buildConfigField("String", "EXERCISE_API_KEY",
             "\"${secret("EXERCISE_API_KEY")}\"")
         buildConfigField("String", "EXERCISE_API_HOST",
             "\"${secret("EXERCISE_API_HOST").ifBlank { "exercisedb.p.rapidapi.com" }}\"")
-        // Off by default. Set USE_MOCK_FITBIT=true in local.properties to feed the Health tab
-        // realistic fake daily metrics instead of a real Fitbit account. The Health tab also
-        // has a runtime switch, so testing it needs no rebuild.
-        buildConfigField("boolean", "USE_MOCK_FITBIT",
-            secret("USE_MOCK_FITBIT").equals("true", ignoreCase = true).toString())
+        // Off by default. Set USE_MOCK_HEALTH=true in local.properties to feed the Health tab
+        // realistic fake daily metrics instead of reading Health Connect. The Health tab also
+        // has a runtime switch, so testing it needs no rebuild. Health Connect is unavailable
+        // on an emulator without the platform app, so the mock is the only source there.
+        buildConfigField("boolean", "USE_MOCK_HEALTH",
+            secret("USE_MOCK_HEALTH").equals("true", ignoreCase = true).toString())
     }
 
     buildTypes {
@@ -120,6 +115,7 @@ dependencies {
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.health.connect.client)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.junit)

@@ -263,7 +263,7 @@ private fun RecommendationCardPreview() {
                 ScoredRecommendation("workout-1", "1", pushUp, ScoreBreakdown(0.8, emptyMap()),
                     listOf("Your chest is rested", "Matched to your current level"), emptyList())
             ),
-            note = "Using today's Fitbit activity level (MODERATE)."
+            note = "Using today's synced activity level (MODERATE)."
         ),
         acceptLabel = "Done",
         onGenerate = {},

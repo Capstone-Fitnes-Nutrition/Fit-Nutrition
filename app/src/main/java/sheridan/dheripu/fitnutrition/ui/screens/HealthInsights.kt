@@ -28,7 +28,7 @@ object HealthText {
     fun sleep(minutes: Int): String =
         if (minutes <= 0) "--" else "${minutes / 60}h ${"%02d".format(minutes % 60)}m"
 
-    /** Fitbit's shouting enum turned into the sentence the card shows under the step count. */
+    /** The shouting activity level turned into the sentence the card shows under the steps. */
     fun activityLevel(level: String): String = when (level.uppercase()) {
         "HIGH" -> "Highly active today"
         "MODERATE" -> "Moderately active today"
