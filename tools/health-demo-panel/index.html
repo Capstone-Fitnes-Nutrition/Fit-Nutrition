@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fit-Nutrition health demo panel</title>
+<style>
+  :root {
+    --bg: #11140f;
+    --surface: #1a1f17;
+    --surface-2: #232a1f;
+    --line: #333d2c;
+    --ink: #e8efe0;
+    --ink-dim: #9aa790;
+    --accent: #8fd14f;
+    --accent-ink: #15200a;
+    --warn: #e5a13a;
+    --bad: #e2674a;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  html { color-scheme: dark; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--accent); color: var(--accent-ink); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 40px 24px 80px; }
+
+  h1 { font-size: 26px; font-weight: 650; letter-spacing: -0.02em; margin: 0 0 6px; }
+  .sub { color: var(--ink-dim); margin: 0 0 32px; max-width: 62ch; }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .panel h2 {
+    font-size: 13px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--ink-dim);
+    margin: 0 0 16px;
+  }
+
+  label { display: block; font-size: 13px; color: var(--ink-dim); margin-bottom: 5px; }
+  input[type=text], input[type=email], input[type=password], input[type=date], input[type=number] {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    color: var(--ink);
+    padding: 9px 11px;
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+  }
+  input::placeholder { color: #67715c; }
+  .row { display: grid; gap: 14px; grid-template-columns: 1fr 1fr; }
+  .row-3 { display: grid; gap: 14px; grid-template-columns: repeat(3, 1fr); }
+  .field { margin-bottom: 14px; }
+
+  button {
+    font: inherit; font-weight: 550;
+    border-radius: 7px; border: 1px solid var(--line);
+    background: var(--surface-2); color: var(--ink);
+    padding: 9px 16px; cursor: pointer;
+    transition: background .12s ease, border-color .12s ease;
+  }
+  button:hover:not(:disabled) { background: #2c3527; border-color: #46543c; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  button.primary:hover:not(:disabled) { background: #a0dd63; border-color: #a0dd63; }
+  button.quiet { background: transparent; }
+  .buttons { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+  .sliders { display: grid; gap: 18px; }
+  .slider-row { display: grid; grid-template-columns: 170px 1fr 92px; gap: 14px; align-items: center; }
+  .slider-row > span:first-child { font-size: 14px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .val { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); }
+  .val small { color: var(--ink-dim); font-size: 12px; }
+
+  .readout { display: grid; gap: 10px; }
+  .readout div { display: flex; gap: 10px; align-items: baseline; }
+  .tag {
+    font-size: 12px; font-weight: 600; letter-spacing: .04em;
+    padding: 3px 9px; border-radius: 999px;
+    background: var(--surface-2); border: 1px solid var(--line);
+  }
+  .tag.fire { background: #3a2318; border-color: #6b3a24; color: #f0b79f; }
+  .tag.ok { background: #1f2d16; border-color: #3c5a28; color: #bde394; }
+
+  .status { font-size: 13px; min-height: 20px; margin-top: 12px; }
+  .status.err { color: var(--bad); }
+  .status.good { color: var(--accent); }
+  .status.busy { color: var(--ink-dim); }
+
+  .hint { color: var(--ink-dim); font-size: 13px; margin: 10px 0 0; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12.5px; background: var(--surface-2);
+    padding: 1px 5px; border-radius: 4px;
+  }
+  .hidden { display: none; }
+  @media (max-width: 620px) {
+    .row, .row-3 { grid-template-columns: 1fr; }
+    .slider-row { grid-template-columns: 1fr 72px; }
+    .slider-row input[type=range] { grid-column: 1 / -1; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Health demo panel</h1>
+  <p class="sub">
+    Sets a day's health metrics for one Fit-Nutrition account. The app's sample-data source
+    reads these before falling back to its generated day, so changing a number here and
+    syncing the Health tab shows the alert rules reacting to it.
+  </p>
+
+  <!-- Connection ------------------------------------------------------ -->
+  <section class="panel" id="connectPanel">
+    <h2>Connection</h2>
+    <div class="field">
+      <label for="dbUrl">Realtime Database URL</label>
+      <input id="dbUrl" type="text" spellcheck="false"
+             placeholder="https://fitnutrition-aaee1-default-rtdb.firebaseio.com">
+      <p class="hint">
+        Firebase console, Realtime Database, the URL above the data tree. Saved in this
+        browser only.
+      </p>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="email">Account email</label>
+        <input id="email" type="email" autocomplete="username" spellcheck="false">
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="current-password">
+      </div>
+    </div>
+    <div class="buttons">
+      <button class="primary" id="signIn">Sign in</button>
+      <button class="quiet hidden" id="signOut">Sign out</button>
+    </div>
+    <p class="status" id="authStatus"></p>
+  </section>
+
+  <!-- Day ------------------------------------------------------------- -->
+  <section class="panel hidden" id="dayPanel">
+    <h2>Day</h2>
+    <div class="row">
+      <div class="field">
+        <label for="date">Date</label>
+        <input id="date" type="date">
+      </div>
+      <div class="field">
+        <label for="presets">Presets</label>
+        <div class="buttons" id="presets">
+          <button data-preset="typical">Typical</button>
+          <button data-preset="sedentary">Sedentary</button>
+          <button data-preset="highHr">High resting HR</button>
+          <button data-preset="poorSleep">Poor sleep</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sliders">
+      <div class="slider-row">
+        <span>Steps</span>
+        <input type="range" id="steps" min="0" max="25000" step="100">
+        <span class="val" id="stepsVal"></span>
+      </div>
+      <div class="slider-row">
+        <span>Active minutes</span>
+        <input type="range" id="activeMinutes" min="0" max="180" step="1">
+        <span class="val" id="activeMinutesVal"></span>
+      </div>
+      <div class="slider-row">
+        <span>Resting heart rate</span>
+        <input type="range" id="heartRate" min="0" max="140" step="1">
+        <span class="val" id="heartRateVal"></span>
+      </div>
+      <div class="slider-row">
+        <span>Sleep</span>
+        <input type="range" id="sleepMinutes" min="0" max="660" step="5">
+        <span class="val" id="sleepMinutesVal"></span>
+      </div>
+      <div class="slider-row">
+        <span>Calories out</span>
+        <input type="range" id="calories" min="800" max="4500" step="10">
+        <span class="val" id="caloriesVal"></span>
+      </div>
+      <div class="slider-row">
+        <span>Distance</span>
+        <input type="range" id="distance" min="0" max="30" step="0.1">
+        <span class="val" id="distanceVal"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- What the app will do -------------------------------------------- -->
+  <section class="panel hidden" id="effectPanel">
+    <h2>What the app will show</h2>
+    <div class="readout">
+      <div><span class="tag" id="levelTag">—</span>
+        <span class="hint" style="margin:0">activity level, derived from steps and active minutes</span></div>
+      <div id="alertList"></div>
+    </div>
+  </section>
+
+  <!-- Write ----------------------------------------------------------- -->
+  <section class="panel hidden" id="writePanel">
+    <h2>Save</h2>
+    <div class="buttons">
+      <button class="primary" id="save">Set this day</button>
+      <button id="clear">Clear this day</button>
+    </div>
+    <p class="status" id="writeStatus"></p>
+    <p class="hint">
+      Written to <code>users/&lt;uid&gt;/mock_health/&lt;date&gt;</code>. Clearing a day hands
+      it back to the app's generated data. Pull to refresh the Health tab, or toggle sample
+      data off and on, to pick up a change.
+    </p>
+  </section>
+
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  getDatabase, ref, set, get, remove
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+// Firebase web config for fitnutrition-aaee1. A web API key is a public project identifier,
+// not a secret: the Realtime Database rules are what stop one account reading another's.
+const CONFIG = {
+  apiKey: "AIzaSyARE3iLIdp4ZrPlUYzCNQ9CwQ4hC7tj3gk",
+  authDomain: "fitnutrition-aaee1.firebaseapp.com",
+  projectId: "fitnutrition-aaee1",
+  storageBucket: "fitnutrition-aaee1.firebasestorage.app",
+  messagingSenderId: "363277996898",
+  appId: "1:363277996898:android:a64dff006ecf8070c3123b"
+};
+
+// These mirror HealthRules.kt. If a threshold moves there, move it here too, otherwise the
+// panel promises an alert the app will not raise.
+const HIGH_RESTING_HEART_RATE = 100;
+const LOW_RESTING_HEART_RATE = 40;
+const POOR_SLEEP_MINUTES = 360;
+
+const FIELDS = ["steps", "activeMinutes", "heartRate", "sleepMinutes", "calories", "distance"];
+const PRESETS = {
+  typical:   { steps: 8400, activeMinutes: 28, heartRate: 62, sleepMinutes: 430, calories: 2180, distance: 6.5 },
+  sedentary: { steps: 1200, activeMinutes: 3,  heartRate: 71, sleepMinutes: 400, calories: 1710, distance: 0.9 },
+  highHr:    { steps: 6100, activeMinutes: 18, heartRate: 108, sleepMinutes: 395, calories: 1980, distance: 4.7 },
+  poorSleep: { steps: 7300, activeMinutes: 22, heartRate: 69, sleepMinutes: 285, calories: 2050, distance: 5.6 }
+};
+
+const el = id => document.getElementById(id);
+const panels = ["dayPanel", "effectPanel", "writePanel"].map(el);
+
+let db = null;
+let uid = null;
+
+/* ---- connection ---- */
+
+const savedUrl = localStorage.getItem("fitnutrition.dbUrl");
+if (savedUrl) el("dbUrl").value = savedUrl;
+el("date").value = new Date().toLocaleDateString("en-CA");
+
+const app = initializeApp(CONFIG);
+const auth = getAuth(app);
+
+function status(node, text, kind) {
+  node.textContent = text;
+  node.className = "status" + (kind ? " " + kind : "");
+}
+
+el("signIn").addEventListener("click", async () => {
+  const url = el("dbUrl").value.trim();
+  const email = el("email").value.trim();
+  const password = el("password").value;
+  if (!url) return status(el("authStatus"), "Paste the Realtime Database URL first.", "err");
+  if (!email || !password) return status(el("authStatus"), "Email and password are both needed.", "err");
+
+  status(el("authStatus"), "Signing in…", "busy");
+  el("signIn").disabled = true;
+  try {
+    localStorage.setItem("fitnutrition.dbUrl", url);
+    db = getDatabase(app, url);
+    await signInWithEmailAndPassword(auth, email, password);
+  } catch (error) {
+    status(el("authStatus"), readable(error), "err");
+    el("signIn").disabled = false;
+  }
+});
+
+el("signOut").addEventListener("click", () => signOut(auth));
+
+onAuthStateChanged(auth, async user => {
+  uid = user ? user.uid : null;
+  el("signIn").disabled = false;
+  el("signIn").classList.toggle("hidden", !!user);
+  el("signOut").classList.toggle("hidden", !user);
+  el("password").value = "";
+  panels.forEach(p => p.classList.toggle("hidden", !user));
+
+  if (!user) return status(el("authStatus"), "Signed out.", "");
+  if (!db) db = getDatabase(app, el("dbUrl").value.trim());
+  status(el("authStatus"), `Signed in as ${user.email}.`, "good");
+  await loadDay();
+});
+
+function readable(error) {
+  const code = (error && error.code) || "";
+  if (code.includes("invalid-credential") || code.includes("wrong-password")) {
+    return "That email and password did not match an account.";
+  }
+  if (code.includes("user-not-found")) return "No account with that email.";
+  if (code.includes("too-many-requests")) return "Too many attempts. Wait a minute.";
+  if (code.includes("network")) return "Could not reach Firebase. Check the database URL.";
+  return (error && error.message) || "Something went wrong.";
+}
+
+/* ---- sliders ---- */
+
+function readValues() {
+  const v = {};
+  for (const f of FIELDS) v[f] = Number(el(f).value);
+  return v;
+}
+
+function label(field, value) {
+  switch (field) {
+    case "sleepMinutes": {
+      const h = Math.floor(value / 60), m = value % 60;
+      return `${h}h ${String(m).padStart(2, "0")}m`;
+    }
+    case "distance": return `${value.toFixed(1)} <small>km</small>`;
+    case "heartRate": return value === 0 ? "<small>none</small>" : `${value} <small>bpm</small>`;
+    case "activeMinutes": return `${value} <small>min</small>`;
+    case "calories": return `${value} <small>kcal</small>`;
+    default: return value.toLocaleString("en-CA");
+  }
+}
+
+function activityLevel(steps, activeMinutes) {
+  if (steps >= 10000 && activeMinutes >= 30) return "HIGH";
+  if (steps >= 5000 && activeMinutes >= 15) return "MODERATE";
+  if (steps >= 2500) return "LOW";
+  return "SEDENTARY";
+}
+
+function render() {
+  const v = readValues();
+  for (const f of FIELDS) el(f + "Val").innerHTML = label(f, v[f]);
+  el("levelTag").textContent = activityLevel(v.steps, v.activeMinutes);
+
+  const alerts = [];
+  if (v.heartRate > HIGH_RESTING_HEART_RATE) {
+    alerts.push(["fire", `BR5 fires: resting heart rate ${v.heartRate} is above ${HIGH_RESTING_HEART_RATE}`]);
+  } else if (v.heartRate > 0 && v.heartRate < LOW_RESTING_HEART_RATE) {
+    alerts.push(["fire", `BR5 fires: resting heart rate ${v.heartRate} is below ${LOW_RESTING_HEART_RATE}`]);
+  }
+  if (v.sleepMinutes > 0 && v.sleepMinutes < POOR_SLEEP_MINUTES) {
+    alerts.push(["warn", "Counts as a poor night. BR4 needs three in a row, so set the two days before this one too."]);
+  }
+  if (!alerts.length) alerts.push(["ok", "No alert from this day on its own"]);
+
+  el("alertList").innerHTML = alerts
+    .map(([kind, text]) => `<span class="tag ${kind === "ok" ? "ok" : kind === "fire" ? "fire" : ""}">${text}</span>`)
+    .join(" ");
+}
+
+FIELDS.forEach(f => el(f).addEventListener("input", render));
+
+document.getElementById("presets").addEventListener("click", event => {
+  const name = event.target.dataset.preset;
+  if (!name) return;
+  applyValues(PRESETS[name]);
+});
+
+function applyValues(values) {
+  for (const f of FIELDS) if (values[f] !== undefined) el(f).value = values[f];
+  render();
+}
+
+applyValues(PRESETS.typical);
+
+/* ---- read and write ---- */
+
+el("date").addEventListener("change", loadDay);
+
+function dayRef() {
+  return ref(db, `users/${uid}/mock_health/${el("date").value}`);
+}
+
+async function loadDay() {
+  if (!uid || !db) return;
+  status(el("writeStatus"), "Loading…", "busy");
+  try {
+    const snapshot = await get(dayRef());
+    if (snapshot.exists()) {
+      applyValues(snapshot.val());
+      status(el("writeStatus"), "This day is already set. Change it or clear it.", "");
+    } else {
+      status(el("writeStatus"), "No override for this day yet; the app generates it.", "");
+    }
+  } catch (error) {
+    status(el("writeStatus"), readable(error), "err");
+  }
+}
+
+el("save").addEventListener("click", async () => {
+  if (!uid || !db) return;
+  const v = readValues();
+  const date = el("date").value;
+  status(el("writeStatus"), "Saving…", "busy");
+  try {
+    await set(dayRef(), {
+      date,
+      steps: v.steps,
+      distance: Number(v.distance.toFixed(2)),
+      calories: v.calories,
+      heartRate: v.heartRate,
+      activeMinutes: v.activeMinutes,
+      sleepMinutes: v.sleepMinutes,
+      lastSyncTime: "Set from the demo panel",
+      activityLevel: activityLevel(v.steps, v.activeMinutes),
+      timestamp: Date.now()
+    });
+    status(el("writeStatus"), `${date} set. Sync the Health tab to see it.`, "good");
+  } catch (error) {
+    status(el("writeStatus"), readable(error), "err");
+  }
+});
+
+el("clear").addEventListener("click", async () => {
+  if (!uid || !db) return;
+  const date = el("date").value;
+  status(el("writeStatus"), "Clearing…", "busy");
+  try {
+    await remove(dayRef());
+    status(el("writeStatus"), `${date} cleared. The app generates this day again.`, "good");
+  } catch (error) {
+    status(el("writeStatus"), readable(error), "err");
+  }
+});
+</script>
+</body>
+</html>
