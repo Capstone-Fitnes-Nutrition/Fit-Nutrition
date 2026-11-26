@@ -19,7 +19,7 @@ import sheridan.dheripu.fitnutrition.model.HealthMetrics
 import sheridan.dheripu.fitnutrition.model.health.HealthAlert
 import sheridan.dheripu.fitnutrition.model.health.HealthAlertEvaluator
 import sheridan.dheripu.fitnutrition.repository.HealthRepository
-import sheridan.dheripu.fitnutrition.repository.MockHealthOverrideRepository
+import sheridan.dheripu.fitnutrition.repository.MockHealthOverrideStore
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -29,7 +29,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         .getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
 
     private val realSource = HealthConnectDataSource(application.applicationContext)
-    private val mockSource = MockHealthDataSource(overrides = MockHealthOverrideRepository())
+    private val mockSource = MockHealthDataSource(
+        overrides = MockHealthOverrideStore(application.applicationContext)
+    )
     private val healthRepository = HealthRepository()
 
     private val _useMockData = MutableStateFlow(

@@ -195,8 +195,7 @@ private fun MockDataToggle(
                 Text("Use sample health data", style = MaterialTheme.typography.titleMedium)
                 Text(
                     text = if (enabled) {
-                        "Showing seven days of generated metrics. The demo panel can set " +
-                            "any day's numbers."
+                        "Showing seven days of generated metrics."
                     } else {
                         "Turn on to try the Health tab with no watch and no Health Connect."
                     },
@@ -204,6 +203,18 @@ private fun MockDataToggle(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp)
                 )
+                if (enabled) {
+                    // Reason: the panel runs on the machine holding the adb connection, not on
+                    // this device, so the address is shown to read rather than to tap. Tapping
+                    // it here would ask this device for its own localhost and find nothing.
+                    Text(
+                        text = "Set any day from the demo panel at localhost:8777, " +
+                            "on the computer running adb.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 6.dp)
+                    )
+                }
             }
             Switch(checked = enabled, onCheckedChange = onToggle)
         }

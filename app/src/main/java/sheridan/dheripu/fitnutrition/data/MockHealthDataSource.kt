@@ -1,8 +1,10 @@
 package sheridan.dheripu.fitnutrition.data
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import sheridan.dheripu.fitnutrition.model.HealthMetrics
 import sheridan.dheripu.fitnutrition.model.health.MockHealthData
-import sheridan.dheripu.fitnutrition.repository.MockHealthOverrideRepository
+import sheridan.dheripu.fitnutrition.repository.MockHealthOverrideStore
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeParseException
@@ -19,7 +21,7 @@ import java.time.format.DateTimeParseException
  */
 class MockHealthDataSource(
     private val zone: ZoneId = ZoneId.systemDefault(),
-    private val overrides: MockHealthOverrideRepository? = null
+    private val overrides: MockHealthOverrideStore? = null
 ) : HealthDataSource {
 
     override val isConfigured: Boolean = true
@@ -34,7 +36,7 @@ class MockHealthDataSource(
         } catch (_: DateTimeParseException) {
             return Result.failure(IllegalArgumentException("Not an ISO date: $date"))
         }
-        val override = overrides?.overrideFor(date)
+        val override = readOverride(date)
         return Result.success(override ?: MockHealthData.day(parsed))
     }
 
@@ -42,8 +44,13 @@ class MockHealthDataSource(
         val today = LocalDate.now(zone)
         return (0 until days).map { offset ->
             val date = today.minusDays(offset.toLong())
-            overrides?.overrideFor(date.toString()) ?: MockHealthData.day(date)
+            readOverride(date.toString()) ?: MockHealthData.day(date)
         }
+    }
+
+    /** Reason: the override is a file read, so it stays off the caller's thread. */
+    private suspend fun readOverride(date: String) = overrides?.let { store ->
+        withContext(Dispatchers.IO) { store.overrideFor(date) }
     }
 
     override fun disconnect() = Unit

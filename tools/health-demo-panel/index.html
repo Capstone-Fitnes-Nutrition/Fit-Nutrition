@@ -118,36 +118,23 @@
 
   <h1>Health demo panel</h1>
   <p class="sub">
-    Sets a day's health metrics for one Fit-Nutrition account. The app's sample-data source
-    reads these before falling back to its generated day, so changing a number here and
-    syncing the Health tab shows the alert rules reacting to it.
+    Sets a day's health metrics on the attached device. The app's sample-data source reads
+    these before falling back to its generated day, so changing a number here and syncing the
+    Health tab shows the alert rules reacting to it.
   </p>
 
-  <!-- Connection ------------------------------------------------------ -->
-  <section class="panel" id="connectPanel">
-    <h2>Connection</h2>
-    <div class="row">
-      <div class="field">
-        <label for="email">Account email</label>
-        <input id="email" type="email" autocomplete="username" spellcheck="false">
-      </div>
-      <div class="field">
-        <label for="password">Password</label>
-        <input id="password" type="password" autocomplete="current-password">
-      </div>
-    </div>
-    <div class="buttons">
-      <button class="primary" id="signIn">Sign in</button>
-      <button class="quiet hidden" id="signOut">Sign out</button>
-    </div>
-    <p class="status" id="authStatus"></p>
+  <!-- Device --------------------------------------------------------- -->
+  <section class="panel" id="devicePanel">
+    <h2>Device</h2>
+    <p class="status busy" id="deviceStatus">Looking for a device…</p>
     <p class="hint">
-      The same account you sign into the app with. Nothing is stored in this browser.
+      Found over <code>adb</code>, so there is nothing to sign into: the override goes to the
+      app on whichever device is attached, whatever account it happens to be signed into.
     </p>
   </section>
 
   <!-- Day ------------------------------------------------------------- -->
-  <section class="panel hidden" id="dayPanel">
+  <section class="panel" id="dayPanel">
     <h2>Day</h2>
     <div class="row">
       <div class="field">
@@ -168,7 +155,7 @@
     <div class="sliders">
       <div class="slider-row">
         <span>Steps</span>
-        <input type="range" id="steps" min="0" max="25000" step="100">
+        <input type="range" id="steps" min="0" max="25000" step="10">
         <span class="val" id="stepsVal"></span>
       </div>
       <div class="slider-row">
@@ -200,7 +187,7 @@
   </section>
 
   <!-- What the app will do -------------------------------------------- -->
-  <section class="panel hidden" id="effectPanel">
+  <section class="panel" id="effectPanel">
     <h2>What the app will show</h2>
     <div class="readout">
       <div><span class="tag" id="levelTag">—</span>
@@ -210,7 +197,7 @@
   </section>
 
   <!-- Write ----------------------------------------------------------- -->
-  <section class="panel hidden" id="writePanel">
+  <section class="panel" id="writePanel">
     <h2>Save</h2>
     <div class="buttons">
       <button class="primary" id="save">Set this day</button>
@@ -218,33 +205,15 @@
     </div>
     <p class="status" id="writeStatus"></p>
     <p class="hint">
-      Written to <code>users/&lt;uid&gt;/mockHealth/&lt;date&gt;</code>. Clearing a day hands
-      it back to the app's generated data. Pull to refresh the Health tab, or toggle sample
-      data off and on, to pick up a change.
+      Pushed to the app's own <code>files/mock_health/&lt;date&gt;.json</code>. Clearing a day
+      hands it back to the app's generated data. Hit Sync Data on the Health tab, or toggle
+      sample data off and on, to pick up a change.
     </p>
   </section>
 
 </div>
 
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import {
-  getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import {
-  getFirestore, doc, setDoc, getDoc, deleteDoc
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-// Firebase web config for fitnutrition-aaee1. A web API key is a public project identifier,
-// not a secret: the Firestore rules are what stop one account reading another's.
-const CONFIG = {
-  apiKey: "AIzaSyARE3iLIdp4ZrPlUYzCNQ9CwQ4hC7tj3gk",
-  authDomain: "fitnutrition-aaee1.firebaseapp.com",
-  projectId: "fitnutrition-aaee1",
-  storageBucket: "fitnutrition-aaee1.firebasestorage.app",
-  messagingSenderId: "363277996898",
-  appId: "1:363277996898:android:a64dff006ecf8070c3123b"
-};
 
 // These mirror HealthRules.kt. If a threshold moves there, move it here too, otherwise the
 // panel promises an alert the app will not raise.
@@ -261,77 +230,45 @@ const PRESETS = {
 };
 
 const el = id => document.getElementById(id);
-const panels = ["dayPanel", "effectPanel", "writePanel"].map(el);
-
-let uid = null;
-
-/* ---- connection ---- */
-
-el("date").value = new Date().toLocaleDateString("en-CA");
-
-const app = initializeApp(CONFIG);
-const auth = getAuth(app);
-const db = getFirestore(app);
+let deviceReady = false;
 
 function status(node, text, kind) {
   node.textContent = text;
   node.className = "status" + (kind ? " " + kind : "");
 }
 
-el("signIn").addEventListener("click", async () => {
-  const email = el("email").value.trim();
-  const password = el("password").value;
-  if (!email || !password) return status(el("authStatus"), "Email and password are both needed.", "err");
+/* ---- device ---- */
 
-  status(el("authStatus"), "Signing in…", "busy");
-  el("signIn").disabled = true;
+async function findDevice() {
   try {
-    await signInWithEmailAndPassword(auth, email, password);
+    const state = await (await fetch("/api/device")).json();
+    deviceReady = state.ok === true;
+    status(el("deviceStatus"),
+      state.ok ? `${state.model} — ${state.package}` : state.message,
+      state.ok ? "good" : "err");
   } catch (error) {
-    status(el("authStatus"), readable(error), "err");
-    el("signIn").disabled = false;
+    deviceReady = false;
+    status(el("deviceStatus"),
+      "The panel's own server is not answering. Start it with serve.py.", "err");
   }
-});
-
-el("signOut").addEventListener("click", () => signOut(auth));
-
-onAuthStateChanged(auth, async user => {
-  uid = user ? user.uid : null;
-  el("signIn").disabled = false;
-  el("signIn").classList.toggle("hidden", !!user);
-  el("signOut").classList.toggle("hidden", !user);
-  el("password").value = "";
-  panels.forEach(p => p.classList.toggle("hidden", !user));
-
-  if (!user) return status(el("authStatus"), "Signed out.", "");
-  status(el("authStatus"), `Signed in as ${user.email}.`, "good");
-  await loadDay();
-});
-
-function readable(error) {
-  const code = (error && error.code) || "";
-  if (code.includes("invalid-credential") || code.includes("wrong-password")) {
-    return "That email and password did not match an account.";
-  }
-  if (code.includes("user-not-found")) return "No account with that email.";
-  if (code.includes("too-many-requests")) return "Too many attempts. Wait a minute.";
-  if (code.includes("network")) return "Could not reach Firebase. Check your connection.";
-  return (error && error.message) || "Something went wrong.";
+  el("save").disabled = !deviceReady;
+  el("clear").disabled = !deviceReady;
+  if (deviceReady) loadDay();
 }
 
 /* ---- sliders ---- */
 
 function readValues() {
-  const v = {};
-  for (const f of FIELDS) v[f] = Number(el(f).value);
-  return v;
+  const values = {};
+  for (const field of FIELDS) values[field] = Number(el(field).value);
+  return values;
 }
 
 function label(field, value) {
   switch (field) {
     case "sleepMinutes": {
-      const h = Math.floor(value / 60), m = value % 60;
-      return `${h}h ${String(m).padStart(2, "0")}m`;
+      const hours = Math.floor(value / 60), minutes = value % 60;
+      return `${hours}h ${String(minutes).padStart(2, "0")}m`;
     }
     case "distance": return `${value.toFixed(1)} <small>km</small>`;
     case "heartRate": return value === 0 ? "<small>none</small>" : `${value} <small>bpm</small>`;
@@ -349,17 +286,17 @@ function activityLevel(steps, activeMinutes) {
 }
 
 function render() {
-  const v = readValues();
-  for (const f of FIELDS) el(f + "Val").innerHTML = label(f, v[f]);
-  el("levelTag").textContent = activityLevel(v.steps, v.activeMinutes);
+  const values = readValues();
+  for (const field of FIELDS) el(field + "Val").innerHTML = label(field, values[field]);
+  el("levelTag").textContent = activityLevel(values.steps, values.activeMinutes);
 
   const alerts = [];
-  if (v.heartRate > HIGH_RESTING_HEART_RATE) {
-    alerts.push(["fire", `BR5 fires: resting heart rate ${v.heartRate} is above ${HIGH_RESTING_HEART_RATE}`]);
-  } else if (v.heartRate > 0 && v.heartRate < LOW_RESTING_HEART_RATE) {
-    alerts.push(["fire", `BR5 fires: resting heart rate ${v.heartRate} is below ${LOW_RESTING_HEART_RATE}`]);
+  if (values.heartRate > HIGH_RESTING_HEART_RATE) {
+    alerts.push(["fire", `BR5 fires: resting heart rate ${values.heartRate} is above ${HIGH_RESTING_HEART_RATE}`]);
+  } else if (values.heartRate > 0 && values.heartRate < LOW_RESTING_HEART_RATE) {
+    alerts.push(["fire", `BR5 fires: resting heart rate ${values.heartRate} is below ${LOW_RESTING_HEART_RATE}`]);
   }
-  if (v.sleepMinutes > 0 && v.sleepMinutes < POOR_SLEEP_MINUTES) {
+  if (values.sleepMinutes > 0 && values.sleepMinutes < POOR_SLEEP_MINUTES) {
     alerts.push(["warn", "Counts as a poor night. BR4 needs three in a row, so set the two days before this one too."]);
   }
   if (!alerts.length) alerts.push(["ok", "No alert from this day on its own"]);
@@ -369,80 +306,75 @@ function render() {
     .join(" ");
 }
 
-FIELDS.forEach(f => el(f).addEventListener("input", render));
-
-document.getElementById("presets").addEventListener("click", event => {
-  const name = event.target.dataset.preset;
-  if (!name) return;
-  applyValues(PRESETS[name]);
-});
-
 function applyValues(values) {
-  for (const f of FIELDS) if (values[f] !== undefined) el(f).value = values[f];
+  for (const field of FIELDS) if (values[field] !== undefined) el(field).value = values[field];
   render();
 }
 
-applyValues(PRESETS.typical);
+FIELDS.forEach(field => el(field).addEventListener("input", render));
+
+el("presets").addEventListener("click", event => {
+  const name = event.target.dataset.preset;
+  if (name) applyValues(PRESETS[name]);
+});
 
 /* ---- read and write ---- */
 
+el("date").value = new Date().toLocaleDateString("en-CA");
 el("date").addEventListener("change", loadDay);
 
-function dayRef() {
-  return doc(db, "users", uid, "mockHealth", el("date").value);
+async function call(method, body) {
+  const date = el("date").value;
+  const url = `/api/day?date=${encodeURIComponent(date)}`;
+  const options = body
+    ? { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, date }) }
+    : { method };
+  const response = await fetch(url, options);
+  const payload = await response.json();
+  if (!payload.ok) throw new Error(payload.message || "The device refused that.");
+  return payload;
 }
 
 async function loadDay() {
-  if (!uid) return;
+  if (!deviceReady) return;
   status(el("writeStatus"), "Loading…", "busy");
   try {
-    const snapshot = await getDoc(dayRef());
-    if (snapshot.exists()) {
-      applyValues(snapshot.data());
+    const { day } = await call("GET");
+    if (day) {
+      applyValues(day);
       status(el("writeStatus"), "This day is already set. Change it or clear it.", "");
     } else {
       status(el("writeStatus"), "No override for this day yet; the app generates it.", "");
     }
   } catch (error) {
-    status(el("writeStatus"), readable(error), "err");
+    status(el("writeStatus"), error.message, "err");
   }
 }
 
 el("save").addEventListener("click", async () => {
-  if (!uid) return;
-  const v = readValues();
-  const date = el("date").value;
-  status(el("writeStatus"), "Saving…", "busy");
+  const values = readValues();
+  status(el("writeStatus"), "Pushing…", "busy");
   try {
-    await setDoc(dayRef(), {
-      date,
-      steps: v.steps,
-      distance: Number(v.distance.toFixed(2)),
-      calories: v.calories,
-      heartRate: v.heartRate,
-      activeMinutes: v.activeMinutes,
-      sleepMinutes: v.sleepMinutes,
-      lastSyncTime: "Set from the demo panel",
-      activityLevel: activityLevel(v.steps, v.activeMinutes),
-      timestamp: Date.now()
-    });
-    status(el("writeStatus"), `${date} set. Sync the Health tab to see it.`, "good");
+    await call("POST", { ...values, distance: Number(values.distance.toFixed(2)) });
+    status(el("writeStatus"), `${el("date").value} set. Sync the Health tab to see it.`, "good");
   } catch (error) {
-    status(el("writeStatus"), readable(error), "err");
+    status(el("writeStatus"), error.message, "err");
   }
 });
 
 el("clear").addEventListener("click", async () => {
-  if (!uid) return;
-  const date = el("date").value;
   status(el("writeStatus"), "Clearing…", "busy");
   try {
-    await deleteDoc(dayRef());
-    status(el("writeStatus"), `${date} cleared. The app generates this day again.`, "good");
+    await call("DELETE");
+    status(el("writeStatus"), `${el("date").value} cleared. The app generates this day again.`, "good");
   } catch (error) {
-    status(el("writeStatus"), readable(error), "err");
+    status(el("writeStatus"), error.message, "err");
   }
 });
+
+applyValues(PRESETS.typical);
+findDevice();
+setInterval(findDevice, 15000);
 </script>
 </body>
 </html>

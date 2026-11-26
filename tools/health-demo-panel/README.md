@@ -12,23 +12,23 @@ Android 14 or later has Health Connect and the permission flow works there, but 
 steps or sleep to it, so a real read comes back empty. The sample-data source is what fills the
 tab — and a source that generates its own deterministic days cannot be steered during a demo.
 
-This panel steers it. `MockHealthDataSource` reads
-`users/{uid}/mockHealth/{yyyy-MM-dd}` from Firestore before falling back to the generated day,
-and this page is what writes there.
+This panel steers it. `MockHealthDataSource` reads a day from the app's own
+`files/mock_health/{yyyy-MM-dd}.json` before falling back to the generated day, and this page
+is what puts it there.
 
 ## Running it
 
 ```bash
-python3 -m http.server 8777 --directory tools/health-demo-panel
+python3 tools/health-demo-panel/serve.py
 ```
 
-Then open <http://localhost:8777>. Serving it beats opening the file directly, because
-Firebase Auth is happier with an http origin.
+Then open <http://localhost:8777>. There is nothing to sign into. The page talks to a small
+local server that drives `adb`, so it follows whichever device is attached and whatever
+account that install happens to be signed into — which is the point: nobody remembers the
+throwaway account an emulator was set up with.
 
-Sign in with the email and password of the account you are demoing — the same credentials you
-use in the app. Nothing else to configure: the Firebase project is baked in, and the Firestore
-rules only allow a user to touch documents under their own `users/{uid}`, so the panel cannot
-write to anyone else's.
+You need `adb` on your PATH and exactly one device or emulator attached, with a debug build
+installed. The panel says so plainly if any of that is missing.
 
 ## Using it in a demo
 
@@ -55,6 +55,10 @@ The thresholds the panel previews are duplicated from `model/health/HealthRules.
 If one of those moves in the Kotlin, move it here too. Otherwise the panel promises an alert
 the app will not raise, which is a worse demo than no panel at all.
 
-The Firebase web config in `index.html` is the same public project identifier that ships in
-`app/google-services.json`. A web API key is not a secret; `firestore.rules` is what protects
-the data.
+## How it reaches the app
+
+`serve.py` sends an `am broadcast` to `MockHealthDebugReceiver`, which lives in `src/debug` and
+so is absent from a release build. The app writes the file itself rather than taking an
+`adb push`, because a pushed file is owned by the shell user and the app cannot read it back.
+The app writes to its external files directory, which keeps the file readable from `adb` too,
+so the panel can show what a day is already set to.

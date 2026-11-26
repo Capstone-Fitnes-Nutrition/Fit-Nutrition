@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug-only additions. The demo panel reaches this receiver over adb to set a day's health
+  metrics; nothing here is merged into a release build.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <receiver
+            android:name=".debug.MockHealthDebugReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="sheridan.dheripu.fitnutrition.SET_MOCK_DAY" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>
