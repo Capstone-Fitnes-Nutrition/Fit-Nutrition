@@ -6,15 +6,19 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
+import androidx.compose.material.icons.automirrored.filled.Login
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import sheridan.dheripu.fitnutrition.data.HealthViewModel
@@ -45,9 +49,8 @@ fun WearableScreen(padding: Modifier = Modifier) {
     ) {
         // Header
         Text(
-            text = "Wearable Device",
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold,
+            text = "Wearable",
+            style = MaterialTheme.typography.headlineMedium,
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
@@ -71,19 +74,21 @@ fun WearableScreen(padding: Modifier = Modifier) {
             ) {
                 Column {
                     Text(
-                        text = if (isAuthenticated) "Connected to Fitbit" else "Not Connected",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
+                        text = if (isAuthenticated) "Connected to Fitbit" else "Not connected",
+                        style = MaterialTheme.typography.titleMedium
                     )
                     Text(
-                        text = if (isAuthenticated) "Syncing health data" else "Login to sync your data",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = if (isAuthenticated) "Syncing health data" else "Connect to sync your data",
+                        style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(top = 4.dp)
                     )
                 }
                 Icon(
-                    imageVector = if (isAuthenticated) Icons.Default.CheckCircle else Icons.Default.Warning,
+                    imageVector = if (isAuthenticated) {
+                        Icons.Default.CheckCircle
+                    } else {
+                        Icons.Default.Warning
+                    },
                     contentDescription = null,
                     tint = if (isAuthenticated) {
                         MaterialTheme.colorScheme.primary
@@ -113,7 +118,7 @@ fun WearableScreen(padding: Modifier = Modifier) {
                     Text(
                         text = error,
                         color = MaterialTheme.colorScheme.onErrorContainer,
-                        fontSize = 14.sp,
+                        style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.weight(1f)
                     )
                     IconButton(onClick = { viewModel.clearError() }) {
@@ -188,14 +193,14 @@ private fun MockDataToggle(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("Use sample health data", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text("Use sample health data", style = MaterialTheme.typography.titleMedium)
                 Text(
                     text = if (enabled) {
                         "Showing seven days of generated metrics. No Fitbit account needed."
                     } else {
                         "Turn on to try the Health tab without a Fitbit account or a watch."
                     },
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp)
                 )
@@ -227,31 +232,38 @@ private fun LoginSection(configured: Boolean, onLoginClick: () -> Unit) {
                 tint = MaterialTheme.colorScheme.primary
             )
             Text(
-                text = "Connect Your Fitbit",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
+                text = "Connect your Fitbit",
+                style = MaterialTheme.typography.titleLarge
             )
             Text(
-                text = "Login with your Fitbit account to track steps, heart rate, calories, distance, and sleep data",
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = "Sign in to sync your steps, heart rate, calories, distance and " +
+                    "sleep from Fitbit.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
             )
             Button(
                 onClick = onLoginClick,
                 enabled = configured,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(Icons.Default.Login, contentDescription = null)
+                Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Login with Fitbit")
+                Text("Sign in with Fitbit")
             }
             if (!configured) {
-                Text(
-                    text = "Fitbit is not configured. Add FITBIT_CLIENT_ID and " +
-                        "FITBIT_CLIENT_SECRET to local.properties, or switch on sample data.",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.error
-                )
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                ) {
+                    Text(
+                        text = "Fitbit is not configured. Add FITBIT_CLIENT_ID and " +
+                            "FITBIT_CLIENT_SECRET to local.properties, or switch on sample data.",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
             }
         }
     }
@@ -274,7 +286,11 @@ private fun LoadingSection() {
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 CircularProgressIndicator()
-                Text("Syncing with Fitbit...", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "Syncing with Fitbit",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -304,35 +320,43 @@ private fun HealthMetricsSection(
                 onClick = onLogout,
                 modifier = Modifier.weight(1f)
             ) {
-                Icon(Icons.Default.Logout, contentDescription = null)
+                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Logout")
             }
         }
 
         Text(
-            text = "Today's Metrics",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
+            text = "Today's metrics",
+            style = MaterialTheme.typography.titleLarge,
             modifier = Modifier.padding(top = 8.dp)
         )
 
-        // Metrics Grid
+        // Reason: seven identical tiles gave steps, sleep and activity level the same weight.
+        // Steps is the number the user opens this tab for, so it leads at display size and the
+        // rest follow as a grid.
+        LeadMetricCard(
+            icon = Icons.AutoMirrored.Filled.DirectionsWalk,
+            title = "Steps today",
+            value = HealthText.count(metrics.steps),
+            supporting = HealthText.activityLevel(metrics.activityLevel)
+        )
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             MetricCard(
-                title = "Steps",
-                value = metrics.steps.toString(),
-                icon = "👟",
-                modifier = Modifier.weight(1f)
-            )
-            MetricCard(
-                title = "Heart Rate",
-                value = "${metrics.heartRate}",
+                icon = Icons.Default.MonitorHeart,
+                title = "Resting heart rate",
+                value = metrics.heartRate.takeIf { it > 0 }?.toString() ?: "--",
                 unit = "bpm",
-                icon = "❤️",
+                modifier = Modifier.weight(1f)
+            )
+            MetricCard(
+                icon = Icons.Default.Bedtime,
+                title = "Sleep",
+                value = HealthText.sleep(metrics.sleepMinutes),
                 modifier = Modifier.weight(1f)
             )
         }
@@ -342,43 +366,26 @@ private fun HealthMetricsSection(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             MetricCard(
+                icon = Icons.Default.LocalFireDepartment,
                 title = "Calories",
-                value = metrics.calories.toString(),
-                icon = "🔥",
+                value = HealthText.count(metrics.calories),
+                unit = "kcal",
                 modifier = Modifier.weight(1f)
             )
             MetricCard(
+                icon = Icons.Default.Straighten,
                 title = "Distance",
-                value = String.format("%.2f", metrics.distance),
+                value = HealthText.distance(metrics.distance),
                 unit = "km",
-                icon = "📍",
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            MetricCard(
-                title = "Active",
-                value = "${metrics.activeMinutes}",
-                unit = "min",
-                icon = "⚡",
-                modifier = Modifier.weight(1f)
-            )
-            MetricCard(
-                title = "Activity",
-                value = metrics.activityLevel,
-                icon = "📊",
                 modifier = Modifier.weight(1f)
             )
         }
 
         MetricCard(
-            title = "Sleep",
-            value = HealthText.sleep(metrics.sleepMinutes),
-            icon = "😴",
+            icon = Icons.Default.Bolt,
+            title = "Active minutes",
+            value = HealthText.count(metrics.activeMinutes),
+            unit = "min",
             modifier = Modifier.fillMaxWidth()
         )
 
@@ -398,14 +405,13 @@ private fun HealthMetricsSection(
             ) {
                 Column {
                     Text(
-                        "Last Sync",
-                        fontSize = 12.sp,
+                        "Last sync",
+                        style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
                         text = metrics.lastSyncTime.ifEmpty { "Just now" },
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium
+                        style = MaterialTheme.typography.bodyMedium
                     )
                 }
                 Icon(
@@ -418,43 +424,71 @@ private fun HealthMetricsSection(
     }
 }
 
+/** The one metric the tab exists to show, at display weight. */
 @Composable
-private fun MetricCard(
+private fun LeadMetricCard(
+    icon: ImageVector,
     title: String,
     value: String,
-    unit: String = "",
-    icon: String = "",
+    supporting: String,
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.height(120.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+        )
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(20.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(40.dp))
+            Column {
+                Text(title, style = MaterialTheme.typography.labelLarge)
+                Text(value, style = MaterialTheme.typography.displaySmall)
+                Text(supporting, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+}
+
+@Composable
+private fun MetricCard(
+    icon: ImageVector,
+    title: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    unit: String = ""
+) {
+    Card(
+        // Reason: tonal elevation rather than a drop shadow, which is how Material conveys a
+        // raised surface and the only version that holds up in the dark scheme.
+        modifier = modifier.heightIn(min = 112.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.SpaceEvenly,
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier = Modifier.fillMaxSize().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Text(icon, fontSize = 28.sp)
-            Text(title, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.Center
-            ) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
+            Text(title, style = MaterialTheme.typography.labelMedium)
+            Row(verticalAlignment = Alignment.Bottom) {
                 Text(
-                    value,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold
+                    text = value,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 if (unit.isNotEmpty()) {
                     Text(
-                        " $unit",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 2.dp)
+                        text = " $unit",
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(bottom = 4.dp)
                     )
                 }
             }
@@ -485,8 +519,8 @@ private fun EmptyMetricsSection(onFetch: () -> Unit) {
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                "No data available",
-                fontSize = 16.sp,
+                "No data synced yet",
+                style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(8.dp))

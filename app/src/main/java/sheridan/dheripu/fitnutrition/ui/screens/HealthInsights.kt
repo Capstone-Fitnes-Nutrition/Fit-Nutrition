@@ -27,6 +27,21 @@ import sheridan.dheripu.fitnutrition.model.health.HealthAlertType
 object HealthText {
     fun sleep(minutes: Int): String =
         if (minutes <= 0) "--" else "${minutes / 60}h ${"%02d".format(minutes % 60)}m"
+
+    /** Fitbit's shouting enum turned into the sentence the card shows under the step count. */
+    fun activityLevel(level: String): String = when (level.uppercase()) {
+        "HIGH" -> "Highly active today"
+        "MODERATE" -> "Moderately active today"
+        "LOW" -> "Lightly active today"
+        "SEDENTARY" -> "Mostly sedentary today"
+        else -> "Activity level not known yet"
+    }
+
+    /** Grouped like the Home summary, which already prints 7,542 rather than 7542. */
+    fun count(value: Int): String = java.text.NumberFormat.getIntegerInstance().format(value)
+
+    fun distance(kilometres: Double): String =
+        if (kilometres <= 0.0) "--" else String.format(java.util.Locale.US, "%.2f", kilometres)
 }
 
 @Composable

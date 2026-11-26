@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 import sheridan.dheripu.fitnutrition.BuildConfig
 import sheridan.dheripu.fitnutrition.model.HealthMetrics
@@ -117,7 +118,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    /** Syncs today, then backfills the rest of the week in the background. */
+    /** Syncs today, then saves and backfills the rest of the week without blocking the screen. */
     fun fetchHealthMetrics() {
         if (!_isAuthenticated.value) {
             _errorMessage.value = "Connect Fitbit first."
@@ -126,22 +127,33 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             _isLoading.value = true
             _errorMessage.value = null
-            try {
-                source.fetchDay(today())
-                    .onSuccess { metrics ->
-                        _healthMetrics.value = metrics
-                        saveToHistory(metrics)
-                        backfillWeek()
+            val result = source.fetchDay(today())
+            // Reason: the spinner ends when the numbers are in hand. It used to wait for the
+            // Realtime Database write too, so a database that never answered left the tab
+            // spinning over metrics it had already loaded, and the offline mock could not be
+            // demonstrated at all.
+            _isLoading.value = false
+            result
+                .onSuccess { metrics ->
+                    _healthMetrics.value = metrics
+                    persistInBackground(metrics)
+                }
+                .onFailure { error ->
+                    _errorMessage.value = error.message ?: "Could not sync Fitbit."
+                    if (error.message?.contains("expired", ignoreCase = true) == true) {
+                        handleSessionExpired()
                     }
-                    .onFailure { error ->
-                        _errorMessage.value = error.message ?: "Could not sync Fitbit."
-                        if (error.message?.contains("expired", ignoreCase = true) == true) {
-                            handleSessionExpired()
-                        }
-                    }
-            } finally {
-                _isLoading.value = false
-            }
+                }
+        }
+    }
+
+    /** Storing history is a background concern; the user never waits on it. */
+    private fun persistInBackground(today: HealthMetrics) {
+        viewModelScope.launch {
+            saveToHistory(today)
+            val days = source.fetchRecentDays(HISTORY_DAYS)
+            showLocally(days)
+            days.forEach { saveToHistory(it) }
         }
     }
 
@@ -149,32 +161,42 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     fun syncRecentDays() {
         viewModelScope.launch {
             _isLoading.value = true
-            try {
-                val days = source.fetchRecentDays(HISTORY_DAYS)
-                days.firstOrNull { it.date == today() }?.let { _healthMetrics.value = it }
-                days.forEach { saveToHistory(it) }
-                if (days.isEmpty()) {
-                    _errorMessage.value = "Fitbit has no data for the last week."
-                }
+            val days = try {
+                source.fetchRecentDays(HISTORY_DAYS)
             } finally {
                 _isLoading.value = false
             }
+            if (days.isEmpty()) {
+                _errorMessage.value = "Fitbit has no data for the last week."
+                return@launch
+            }
+            days.firstOrNull { it.date == today() }?.let { _healthMetrics.value = it }
+            showLocally(days)
+            days.forEach { saveToHistory(it) }
         }
     }
 
-    // Reason: today's sync is what the user waits for, so the older days are fetched after it
-    // rather than before, and a failure on them leaves today's numbers on screen.
-    private suspend fun backfillWeek() {
-        val known = _weeklyMetrics.value.map { it.date }.toSet()
-        if (known.size >= HISTORY_DAYS) return
-        source.fetchRecentDays(HISTORY_DAYS)
-            .filterNot { it.date in known }
-            .forEach { saveToHistory(it) }
+    /**
+     * Shows the fetched week straight away instead of waiting for it to round-trip through the
+     * Realtime Database. The database listener still wins once it reports, and it is the only
+     * source of days this session did not fetch.
+     */
+    private fun showLocally(days: List<HealthMetrics>) {
+        if (days.isEmpty()) return
+        val byDate = (days + _weeklyMetrics.value).associateBy { it.date }
+        _weeklyMetrics.value = byDate.values.sortedByDescending { it.date }.take(HISTORY_DAYS)
     }
 
     private suspend fun saveToHistory(metrics: HealthMetrics) {
-        healthRepository.saveHealthMetrics(metrics).first()
-            .onFailure { Log.w(TAG, "Could not save health history: ${it.message}") }
+        // Reason: saveHealthMetrics only emits when Firebase calls back. Unreachable rules or
+        // no network meant it never did, and the caller suspended for good.
+        val saved = withTimeoutOrNull(SAVE_TIMEOUT_MILLIS) {
+            healthRepository.saveHealthMetrics(metrics).first()
+        }
+        when {
+            saved == null -> Log.w(TAG, "Timed out saving health history for ${metrics.date}")
+            saved.isFailure -> Log.w(TAG, "Could not save health history: ${saved.exceptionOrNull()?.message}")
+        }
     }
 
     private fun observeWeeklyHistory() {
@@ -209,6 +231,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         private const val TAG = "HealthViewModel"
         private const val STOP_TIMEOUT_MILLIS = 5_000L
         private const val HISTORY_DAYS = 7
+        private const val SAVE_TIMEOUT_MILLIS = 5_000L
         private const val SETTINGS_PREFS = "health_settings"
         private const val KEY_USE_MOCK = "use_mock_fitbit"
     }
