@@ -5,7 +5,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.PieChart
+import androidx.compose.material.icons.filled.RestaurantMenu
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -86,7 +89,7 @@ fun HomeScreen(
             )
             InfoCard(
                 title = "Water",
-                value = "1.8",
+                value = "--",
                 unit = "L",
                 modifier = Modifier.weight(1f)
             )
@@ -110,7 +113,7 @@ fun HomeScreen(
                 headlineContent = { Text("Log Today's Meals") },
                 leadingContent = {
                     Icon(
-                        Icons.Default.Favorite,
+                        Icons.Default.RestaurantMenu,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary
                     )
@@ -130,7 +133,7 @@ fun HomeScreen(
                 headlineContent = { Text("Start a Workout") },
                 leadingContent = {
                     Icon(
-                        Icons.Default.Favorite,
+                        Icons.Default.FitnessCenter,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary
                     )
@@ -152,7 +155,7 @@ fun HomeScreen(
                 headlineContent = { Text("View Workout Analytics") },
                 leadingContent = {
                     Icon(
-                        Icons.Default.Favorite,
+                        Icons.Default.BarChart,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary
                     )
@@ -173,7 +176,7 @@ fun HomeScreen(
                 headlineContent = { Text("View Nutrition Analytics") },
                 leadingContent = {
                     Icon(
-                        Icons.Default.Favorite,
+                        Icons.Default.PieChart,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary
                     )
