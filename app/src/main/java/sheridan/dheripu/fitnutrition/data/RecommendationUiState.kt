@@ -23,6 +23,9 @@ sealed interface RecommendationUiState {
 
         /** The newest dismissal while the undo offer is still worth showing. */
         val undoableId: String?
+
+        /** True while a dismissal can still be filled from what the engine already ranked. */
+        val hasReserves: Boolean
     }
 
     /**
@@ -36,9 +39,11 @@ sealed interface RecommendationUiState {
         override val handledIds: Set<String> = emptySet(),
         override val notice: String? = null,
         val dismissed: List<ScoredRecommendation<MealPick>> = emptyList(),
-        override val undoableId: String? = null
+        override val undoableId: String? = null,
+        val reserves: List<ScoredRecommendation<MealPick>> = emptyList()
     ) : Suggestions {
         override val dismissedIds: List<String> get() = dismissed.map { it.recommendationId }
+        override val hasReserves: Boolean get() = reserves.isNotEmpty()
     }
 
     data class Workout(
@@ -47,8 +52,10 @@ sealed interface RecommendationUiState {
         override val handledIds: Set<String> = emptySet(),
         override val notice: String? = null,
         val dismissed: List<ScoredRecommendation<PrescribedExercise>> = emptyList(),
-        override val undoableId: String? = null
+        override val undoableId: String? = null,
+        val reserves: List<ScoredRecommendation<PrescribedExercise>> = emptyList()
     ) : Suggestions {
         override val dismissedIds: List<String> get() = dismissed.map { it.recommendationId }
+        override val hasReserves: Boolean get() = reserves.isNotEmpty()
     }
 }

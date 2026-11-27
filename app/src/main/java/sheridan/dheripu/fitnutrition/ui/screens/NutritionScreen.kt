@@ -33,6 +33,7 @@ import coil.compose.AsyncImage
 import sheridan.dheripu.fitnutrition.data.RecipeViewModel
 import sheridan.dheripu.fitnutrition.model.Recipe
 import sheridan.dheripu.fitnutrition.model.RecipeFilters
+import sheridan.dheripu.fitnutrition.data.RecommendationUiState
 import sheridan.dheripu.fitnutrition.ui.components.ScreenHeader
 import sheridan.dheripu.fitnutrition.data.RecommendationViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -97,7 +98,12 @@ fun NutritionScreen(
                 onDismiss = { recommendationViewModel.dismiss(it) },
                 onRestore = { recommendationViewModel.restore(it) },
                 onDismissUndo = { recommendationViewModel.clearUndo() },
-                onNavigateToProfile = onNavigateToProfile
+                onNavigateToProfile = onNavigateToProfile,
+                onOpen = { id ->
+                    (recommendationState as? RecommendationUiState.Meals)?.items
+                        ?.firstOrNull { it.recommendationId == id }
+                        ?.let { onRecipeClick(it.item.recipe.id) }
+                }
             )
         }
 

@@ -38,11 +38,63 @@ class RecommendationViewModelTest {
     @After
     fun tearDown() = Dispatchers.resetMain()
 
+    private fun recipeFor(id: Int, calories: Double) = Recipe(
+        id = id,
+        title = "Recipe $id",
+        image = "",
+        readyInMinutes = 20,
+        servings = 1,
+        sourceUrl = null,
+        summary = "",
+        extendedIngredients = emptyList(),
+        nutrition = Nutrition(
+            listOf(Nutrient("Calories", calories, "kcal"), Nutrient("Protein", 30.0, "g"))
+        ),
+        diets = emptyList(),
+        dishTypes = listOf("main course")
+    )
+
     private fun viewModel(userId: String? = "uid") = RecommendationViewModel(
         dataSource = source,
         clock = { NOW },
         userIdProvider = { userId }
     )
+
+    @Test
+    fun dismissingAMealFillsTheFreedSlotFromTheRankedReserves() = runTest(dispatcher) {
+        source.extraRecipes = listOf(recipeFor(3, 700.0), recipeFor(4, 520.0), recipeFor(5, 480.0))
+        val viewModel = viewModel()
+        viewModel.loadMeals()
+        advanceUntilIdle()
+
+        val loaded = viewModel.state.value as RecommendationUiState.Meals
+        val shownBefore = loaded.items.size
+        val replacement = loaded.reserves.first().recommendationId
+        viewModel.dismiss(loaded.items.first().recommendationId)
+        advanceUntilIdle()
+
+        val after = viewModel.state.value as RecommendationUiState.Meals
+        assertEquals(shownBefore, after.items.size)
+        assertTrue(after.items.any { it.recommendationId == replacement })
+        assertEquals(loaded.reserves.size - 1, after.reserves.size)
+    }
+
+    @Test
+    fun theLastDismissalSaysSoInsteadOfLeavingTheCardSilentlyEmpty() = runTest(dispatcher) {
+        val viewModel = viewModel()
+        viewModel.loadMeals()
+        advanceUntilIdle()
+
+        // The fake offers two recipes and the engine shows both, so there is no reserve.
+        val loaded = viewModel.state.value as RecommendationUiState.Meals
+        assertTrue(loaded.reserves.isEmpty())
+        viewModel.dismiss(loaded.items.first().recommendationId)
+        advanceUntilIdle()
+
+        val after = viewModel.state.value as RecommendationUiState.Meals
+        assertEquals(loaded.items.size - 1, after.items.size)
+        assertTrue(after.notice.orEmpty().contains("Refresh"))
+    }
 
     @Test
     fun signedOutUserIsAskedToSignIn() = runTest(dispatcher) {
@@ -232,9 +284,12 @@ class RecommendationViewModelTest {
             )
         )
 
+        /** Extra pages of candidates, for the tests that need more than the engine shows. */
+        var extraRecipes: List<Recipe> = emptyList()
+
         override suspend fun recipeCandidates(filters: RecipeFilters): List<Recipe> {
             recipeError?.let { throw it }
-            return listOf(recipe(1, 600.0), recipe(2, 450.0))
+            return listOf(recipe(1, 600.0), recipe(2, 450.0)) + extraRecipes
         }
 
         override suspend fun exerciseCandidates(bodyPart: String): List<Exercise> {

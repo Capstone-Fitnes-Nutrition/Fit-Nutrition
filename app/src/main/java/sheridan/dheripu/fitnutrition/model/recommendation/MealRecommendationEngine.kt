@@ -44,8 +44,13 @@ class MealRecommendationEngine(
         if (eligible.isEmpty()) {
             return RecommendationResponse(
                 recommendations = emptyList(),
-                rationale = advisory
-                    ?: "No recipes matched your dietary needs and preferences."
+                rationale = when {
+                    candidates.isEmpty() -> "Couldn't load any recipes to rank. Try again."
+                    offered.isEmpty() ->
+                        "You've turned down everything found this time. They come back in a " +
+                            "few minutes, or refresh for a new set."
+                    else -> advisory ?: "No recipes matched your dietary needs and preferences."
+                }
             )
         }
         val ranked = eligible.map { score(context, it, targets, preferences, nowMillis) }.ranked()
@@ -64,7 +69,8 @@ class MealRecommendationEngine(
             recommendations = picks,
             rationale = "Ranked ${eligible.size} of ${candidates.size} recipes for a " +
                 "${targets.calories} kcal meal.",
-            advisory = advisory
+            advisory = advisory,
+            reserves = (ranked - picks.toSet()).take(MAX_RESERVES)
         )
     }
 
@@ -210,6 +216,7 @@ class MealRecommendationEngine(
         )
 
         private const val MAX_RESULTS = 3
+        private const val MAX_RESERVES = 9
         private const val MAX_REASONS = 3
 
         /** Protein up to this multiple of the target still scores full marks. */

@@ -89,7 +89,13 @@ fun WorkoutAnalyticsScreen(
     val tabs = listOf("Weekly", "Monthly")
     val days = if (selectedTab == 0) 7 else 30
 
-    LaunchedEffect(Unit) { fitnessViewModel.loadSteps() }
+    // Reason: the only load of the workout history was the ViewModel's init, so a workout
+    // logged after that — from the recommendation card, which writes straight to Firestore and
+    // never touches this list — was missing from the analytics until the app restarted.
+    LaunchedEffect(Unit) {
+        fitnessViewModel.loadWorkouts()
+        fitnessViewModel.loadSteps()
+    }
 
     val workoutStats = remember(workouts, days) { buildWorkoutStats(workouts, days) }
     val stepsStats = remember(stepsState.entries, days) { buildStepsStats(stepsState.entries, days) }

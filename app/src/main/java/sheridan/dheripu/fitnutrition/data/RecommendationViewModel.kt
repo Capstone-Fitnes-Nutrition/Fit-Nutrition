@@ -76,7 +76,8 @@ class RecommendationViewModel(
                 RecommendationUiState.Meals(
                     items = response.recommendations,
                     note = noteOf(context.historyNote, null, response),
-                    dismissed = (previous as? RecommendationUiState.Meals)?.dismissed.orEmpty()
+                    dismissed = (previous as? RecommendationUiState.Meals)?.dismissed.orEmpty(),
+                    reserves = response.reserves
                 )
             }
         }
@@ -102,7 +103,8 @@ class RecommendationViewModel(
                     items = response.recommendations,
                     note = noteOf(context.historyNote, syncedNote, response),
                     dismissed = (previous as? RecommendationUiState.Workout)?.dismissed
-                        .orEmpty()
+                        .orEmpty(),
+                    reserves = response.reserves
                 )
             }
         }
@@ -128,40 +130,68 @@ class RecommendationViewModel(
      */
     fun dismiss(recommendationId: String, reason: String = "") {
         val userId = userIdProvider() ?: return
+        // Reason: logging that a replacement was shown is a suspend call, so the swap is
+        // decided here and recorded with the dismissal in the one coroutine below.
+        var shown: ScoredRecommendation<*>? = null
         val (dismissed, type) = when (val current = _state.value) {
             is RecommendationUiState.Meals -> {
                 val item = current.items.firstOrNull { it.recommendationId == recommendationId }
                     ?: return
+                // Reason: a dismissal used to leave a gap, and enough of them emptied the card
+                // with nothing to refill it. The engine already ranked more than it showed, so
+                // the next best one takes the freed slot without another request.
+                val replacement = current.reserves.firstOrNull()
                 _state.value = current.copy(
-                    items = current.items - item,
+                    items = current.items - item + listOfNotNull(replacement),
+                    reserves = current.reserves.drop(1),
                     dismissed = listOf(item) + current.dismissed,
                     undoableId = recommendationId,
-                    notice = null
+                    notice = refilledNotice(replacement?.item?.recipe?.title, current.reserves)
                 )
+                shown = replacement
                 item to RecommendationType.MEAL
             }
             is RecommendationUiState.Workout -> {
                 val item = current.items.firstOrNull { it.recommendationId == recommendationId }
                     ?: return
+                val replacement = current.reserves.firstOrNull()
                 _state.value = current.copy(
-                    items = current.items - item,
+                    items = current.items - item + listOfNotNull(replacement),
+                    reserves = current.reserves.drop(1),
                     dismissed = listOf(item) + current.dismissed,
                     undoableId = recommendationId,
-                    notice = null
+                    notice = refilledNotice(
+                        replacement?.item?.exercise?.name?.replaceFirstChar(Char::uppercase),
+                        current.reserves
+                    )
                 )
+                shown = replacement
                 item to RecommendationType.WORKOUT
             }
             else -> return
         }
         sessionDismissals[dismissed.itemId] = clock()
+        val replacement = shown
         viewModelScope.launch {
             attempt {
                 dataSource.recordFeedback(
                     userId, listOf(event(dismissed, type, FeedbackAction.DISMISSED, reason))
                 )
             }
+            if (replacement != null) attempt { recordShown(userId, type, listOf(replacement)) }
         }
     }
+
+    /**
+     * What the card says after a dismissal: what took the freed slot, or that the engine has
+     * run out of ranked candidates and a refresh is what brings more.
+     */
+    private fun refilledNotice(replacementName: String?, reservesBefore: List<*>): String? =
+        when {
+            replacementName != null -> "Swapped in $replacementName."
+            reservesBefore.isEmpty() -> "That was the last ranked suggestion. Refresh for more."
+            else -> null
+        }
 
     /**
      * Puts a dismissed suggestion back in the list and clears its suppression, so the next

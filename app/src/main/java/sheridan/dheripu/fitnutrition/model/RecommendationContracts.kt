@@ -53,7 +53,16 @@ data class RecommendationResponse<T>(
      * their profile excluded. Shown alongside the results; [rationale] only surfaces when there
      * are none.
      */
-    val advisory: String? = null
+    val advisory: String? = null,
+    /**
+     * The next best candidates, ranked, that did not make the shown list.
+     *
+     * Reason: dismissing a suggestion used to leave a gap, and five dismissals left none at
+     * all, with a refresh offering nothing because the same page came back and everything on
+     * it was suppressed. Keeping the remainder means a dismissal can be filled from what the
+     * engine already ranked, with no second request.
+     */
+    val reserves: List<T> = emptyList()
 )
 
 data class MealSuggestion(

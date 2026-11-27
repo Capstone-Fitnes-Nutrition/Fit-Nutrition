@@ -39,12 +39,20 @@ class WorkoutRecommendationEngine(
             lockedByLevel.takeIf { it > 0 }?.let { WorkoutRules.levelLockMessage(context, it) }
         ).joinToString(" ").ifBlank { null }
         if (eligible.isEmpty()) {
+            // Reason: this said the equipment and level filters were to blame whatever had
+            // happened. An exercise list that came back empty, and a list where the user had
+            // dismissed everything, both got the same message, which sent people to the
+            // profile to fix equipment that was never the problem.
             return RecommendationResponse(
                 recommendations = emptyList(),
-                rationale = if (lockedByLevel > 0) {
-                    WorkoutRules.levelLockMessage(context, lockedByLevel)
-                } else {
-                    "No exercises matched your equipment and current level."
+                rationale = when {
+                    candidates.isEmpty() ->
+                        "Couldn't load any exercises to rank. Try again."
+                    offered.isEmpty() ->
+                        "You've turned down everything found this time. They come back in a " +
+                            "few minutes, or refresh for a new set."
+                    lockedByLevel > 0 -> WorkoutRules.levelLockMessage(context, lockedByLevel)
+                    else -> "No exercises matched your equipment and current level."
                 }
             )
         }
@@ -55,7 +63,8 @@ class WorkoutRecommendationEngine(
         return RecommendationResponse(
             recommendations = picks,
             rationale = "Ranked ${eligible.size} of ${candidates.size} exercises for your level.",
-            advisory = advisory
+            advisory = advisory,
+            reserves = (ranked - picks.toSet()).take(MAX_RESERVES)
         )
     }
 
@@ -147,6 +156,7 @@ class WorkoutRecommendationEngine(
         )
 
         private const val MAX_RESULTS = 5
+        private const val MAX_RESERVES = 15
         private const val MAX_REASONS = 3
     }
 }

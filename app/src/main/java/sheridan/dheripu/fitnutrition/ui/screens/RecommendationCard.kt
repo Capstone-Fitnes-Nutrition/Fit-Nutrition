@@ -1,5 +1,6 @@
 package sheridan.dheripu.fitnutrition.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -64,7 +65,8 @@ fun RecommendationCard(
     modifier: Modifier = Modifier,
     onRestore: (String) -> Unit = {},
     onDismissUndo: () -> Unit = {},
-    onNavigateToProfile: () -> Unit = {}
+    onNavigateToProfile: () -> Unit = {},
+    onOpen: ((String) -> Unit)? = null
 ) {
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -87,7 +89,7 @@ fun RecommendationCard(
             }
             RecommendationBody(
                 state, acceptLabel, onAccept, onDismiss, onRestore, onDismissUndo,
-                onNavigateToProfile
+                onNavigateToProfile, onOpen
             )
         }
     }
@@ -101,7 +103,8 @@ private fun RecommendationBody(
     onDismiss: (String) -> Unit,
     onRestore: (String) -> Unit,
     onDismissUndo: () -> Unit,
-    onNavigateToProfile: () -> Unit
+    onNavigateToProfile: () -> Unit,
+    onOpen: ((String) -> Unit)?
 ) {
     val bodyModifier = Modifier.padding(top = 8.dp)
     when (state) {
@@ -129,6 +132,7 @@ private fun RecommendationBody(
         is RecommendationUiState.Meals -> SuggestionList(
             rows = state.items.map { it.mealRow(state.handledIds) },
             dismissedRows = state.dismissed.map { it.mealRow(state.handledIds) },
+            onOpen = onOpen,
             undoableId = state.undoableId,
             note = state.note,
             notice = state.notice,
@@ -141,6 +145,7 @@ private fun RecommendationBody(
         is RecommendationUiState.Workout -> SuggestionList(
             rows = state.items.map { it.workoutRow(state.handledIds) },
             dismissedRows = state.dismissed.map { it.workoutRow(state.handledIds) },
+            onOpen = onOpen,
             undoableId = state.undoableId,
             note = state.note,
             notice = state.notice,
@@ -183,7 +188,8 @@ private fun SuggestionList(
     onAccept: (String) -> Unit,
     onDismiss: (String) -> Unit,
     onRestore: (String) -> Unit,
-    onDismissUndo: () -> Unit
+    onDismissUndo: () -> Unit,
+    onOpen: ((String) -> Unit)?
 ) {
     Column(
         modifier = Modifier.padding(top = 4.dp),
@@ -216,7 +222,7 @@ private fun SuggestionList(
         }
         // Reason: spacing separates these, not rules. A divider between every suggestion drew
         // more lines than there were suggestions, and the card already bounds the group.
-        rows.forEach { row -> SuggestionItem(row, acceptLabel, onAccept, onDismiss) }
+        rows.forEach { row -> SuggestionItem(row, acceptLabel, onAccept, onDismiss, onOpen) }
         if (dismissedRows.isNotEmpty()) {
             HorizontalDivider()
             DismissedSection(dismissedRows, onRestore)
@@ -293,11 +299,20 @@ private fun SuggestionItem(
     row: SuggestionRow,
     acceptLabel: String,
     onAccept: (String) -> Unit,
-    onDismiss: (String) -> Unit
+    onDismiss: (String) -> Unit,
+    onOpen: ((String) -> Unit)?
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Reason: the title and the figures are what the user reads to decide, so that is
+        // what opens the detail. Only meals have one to open; the workout card passes no
+        // handler and stays inert rather than offering a tap that goes nowhere.
+        val openable = if (onOpen == null) {
+            Modifier
+        } else {
+            Modifier.clickable { onOpen(row.id) }
+        }
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().then(openable),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Column(modifier = Modifier.weight(1f)) {
