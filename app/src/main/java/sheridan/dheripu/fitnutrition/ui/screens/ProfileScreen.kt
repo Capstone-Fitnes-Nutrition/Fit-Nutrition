@@ -233,6 +233,17 @@ fun ProfileScreen(
 @Composable
 private fun ProfileSummary(profile: User?, email: String, onEdit: () -> Unit) {
     val displayValue = { value: String -> value.ifBlank { "Not set" } }
+    // Reason: the stored word is the one the engines match on, which is not always the one
+    // the user tapped — they chose Dumbbells and Peanuts, and the profile holds dumbbell and
+    // peanut. Reading back the label keeps the summary honest about what was picked.
+    val listValue = { values: List<String>?, options: List<ChipOption>, ifEmpty: String ->
+        values.orEmpty().filter(String::isNotBlank)
+            .joinToString(", ") { stored ->
+                options.firstOrNull { it.value.equals(stored, ignoreCase = true) }?.label
+                    ?: stored.replaceFirstChar(Char::uppercase)
+            }
+            .ifBlank { ifEmpty }
+    }
 
     Card(
         modifier = Modifier
@@ -255,8 +266,13 @@ private fun ProfileSummary(profile: User?, email: String, onEdit: () -> Unit) {
             )
             Spacer(modifier = Modifier.height(16.dp))
             ProfileValue("Fitness goal", displayValue(profile?.fitnessGoal.orEmpty()))
+            ProfileValue("Activity level", displayValue(profile?.activityLevel.orEmpty()))
             ProfileValue("Weight", profile?.weight?.takeIf { it.isNotBlank() }?.plus(" kg") ?: "Not set")
             ProfileValue("Height", profile?.height?.takeIf { it.isNotBlank() }?.plus(" cm") ?: "Not set")
+            ProfileValue(
+                "Equipment",
+                listValue(profile?.availableEquipment, WORKOUT_EQUIPMENT, "Not set")
+            )
         }
     }
 
@@ -270,6 +286,23 @@ private fun ProfileSummary(profile: User?, email: String, onEdit: () -> Unit) {
                 text = "Nutrition preferences",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
+            )
+            // Reason: this card held nothing but its own heading. Every value in it is asked
+            // for in the editor and used by the meal engine, so there was no way to check
+            // what the suggestions were being ranked against without opening the editor.
+            Spacer(modifier = Modifier.height(12.dp))
+            ProfileValue("Dietary preference", displayValue(profile?.dietaryPreference.orEmpty()))
+            ProfileValue(
+                "Avoids",
+                listValue(profile?.dietaryRestrictions, DIETARY_RESTRICTIONS, "Nothing")
+            )
+            ProfileValue(
+                "Daily calories",
+                profile?.dailyCalorieTarget?.takeIf { it.isNotBlank() }?.plus(" kcal") ?: "Not set"
+            )
+            ProfileValue(
+                "Daily protein",
+                profile?.dailyProteinTarget?.takeIf { it.isNotBlank() }?.plus(" g") ?: "Not set"
             )
         }
     }
