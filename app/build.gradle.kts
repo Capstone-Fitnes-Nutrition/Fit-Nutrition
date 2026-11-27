@@ -39,8 +39,9 @@ android {
             "\"${secret("EXERCISE_API_HOST").ifBlank { "exercisedb.p.rapidapi.com" }}\"")
         // Off by default. Set USE_MOCK_HEALTH=true in local.properties to feed the Health tab
         // realistic fake daily metrics instead of reading Health Connect. The Health tab also
-        // has a runtime switch, so testing it needs no rebuild. Health Connect is unavailable
-        // on an emulator without the platform app, so the mock is the only source there.
+        // has a runtime switch, so testing it needs no rebuild. Android 14 and up ship Health
+        // Connect in the platform, so a recent emulator has it, but nothing writes steps or
+        // sleep to it there; the mock is what gives the tab something to show.
         buildConfigField("boolean", "USE_MOCK_HEALTH",
             secret("USE_MOCK_HEALTH").equals("true", ignoreCase = true).toString())
     }
