@@ -84,13 +84,14 @@ fun NutritionAnalyticsScreen(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
     ) {
-        IconButton(onClick = onBackClick) {
+        IconButton(onClick = onBackClick, modifier = Modifier.padding(start = 4.dp)) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
         }
 
         ScreenHeader(
             title = "Nutrition Analytics",
-            subtitle = "Your logged meals and macros"
+            subtitle = "Your logged meals and macros",
+            modifier = Modifier.padding(horizontal = 16.dp)
         )
 
         TabRow(selectedTabIndex = selectedTab) {

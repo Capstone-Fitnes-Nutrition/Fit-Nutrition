@@ -10,11 +10,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun ScreenHeader(title: String, subtitle: String? = null) {
+fun ScreenHeader(
+    title: String,
+    subtitle: String? = null,
+    modifier: Modifier = Modifier
+) {
+    // Reason: the horizontal inset belongs to the screen, not to the header. Owning it here
+    // put the title 16dp further in than the cards under it on every screen whose list
+    // already carried a gutter.
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .padding(16.dp)
+            .padding(vertical = 16.dp)
     ) {
         Text(
             text = title,

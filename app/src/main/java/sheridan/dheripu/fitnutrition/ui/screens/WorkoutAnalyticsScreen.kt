@@ -100,14 +100,15 @@ fun WorkoutAnalyticsScreen(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
     ) {
-        IconButton(onClick = onBackClick) {
+        IconButton(onClick = onBackClick, modifier = Modifier.padding(start = 4.dp)) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
 
         }
 
         ScreenHeader(
             title = "Workout Analytics",
-            subtitle = "Track your workout progress"
+            subtitle = "Track your workout progress",
+            modifier = Modifier.padding(horizontal = 16.dp)
         )
 
         TabRow(selectedTabIndex = selectedTab) {

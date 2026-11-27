@@ -66,7 +66,7 @@ fun NutritionScreen(
         modifier = modifier
             .then(padding)
             .fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 16.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
@@ -79,9 +79,7 @@ fun NutritionScreen(
         item {
             OutlinedButton(
                 onClick = onNavigateToNutritionAnalytics,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(Icons.Default.Insights, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
@@ -119,9 +117,7 @@ fun NutritionScreen(
         errorMessage?.let { message ->
             item {
                 Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer
                     )
@@ -176,8 +172,7 @@ fun NutritionScreen(
             else -> items(recipes, key = { it.id }) { recipe ->
                 RecipeCard(
                     recipe = recipe,
-                    onRecipeClick = onRecipeClick,
-                    modifier = Modifier.padding(horizontal = 16.dp)
+                    onRecipeClick = onRecipeClick
                 )
             }
         }
@@ -198,10 +193,13 @@ fun RecipeFiltersSection(
     var maxCalories by remember { mutableStateOf(currentFilters.maxCalories?.toString() ?: "") }
     var minProtein by remember { mutableStateOf(currentFilters.minProtein?.toString() ?: "") }
 
+    // Reason: the list supplies the screen's horizontal gutter, so this adds vertical
+    // breathing room only. Padding all four sides here set the search field and the filter
+    // chips 16dp further in than the cards above them.
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp)
+            .padding(vertical = 8.dp)
     ) {
         // Search Bar
         OutlinedTextField(
