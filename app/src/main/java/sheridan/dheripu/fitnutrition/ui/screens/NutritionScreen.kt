@@ -333,6 +333,7 @@ fun RecipeFiltersSection(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun RecipeCard(recipe: Recipe,
                onRecipeClick: (Int) -> Unit,
@@ -385,8 +386,12 @@ fun RecipeCard(recipe: Recipe,
 
                 // Diets/Tags
                 if (recipe.diets.isNotEmpty()) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    // Reason: a plain Row gave the chips no way to wrap, so a fourth diet was
+                    // squeezed into whatever width was left and "Lacto ovo vegetarian" came
+                    // out one letter per line.
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         recipe.diets.forEach { diet ->
                             AssistChip(
