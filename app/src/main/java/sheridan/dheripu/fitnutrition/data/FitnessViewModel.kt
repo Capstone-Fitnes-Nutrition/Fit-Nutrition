@@ -29,14 +29,23 @@ class FitnessViewModel : ViewModel() {
     var errorMessage by mutableStateOf<String?>(null)
     var stepsState by mutableStateOf(StepsUiState())
 
+    /** Observable copies of the history load state, for screens that render it. */
+    val isLoadingWorkouts = mutableStateOf(false)
+    val workoutsError = mutableStateOf<String?>(null)
+
     init {
         loadWorkouts()
     }
-    private fun loadWorkouts() {
+    fun loadWorkouts() {
         val uid = AuthManager.currentUser?.uid ?:return
+        isLoadingWorkouts.value = true
+        workoutsError.value = null
         workoutRepository.getWorkouts(
             userId = uid,
-            onSuccess = {myWorkouts.value = it},
+            onSuccess = {
+                myWorkouts.value = it
+                isLoadingWorkouts.value = false
+            },
             onError = { message ->
                 errorMessage = if (message.contains("PERMISSION_DENIED", ignoreCase = true)) {
                     "Saved workout history isn't accessible for this account. " +
@@ -44,6 +53,8 @@ class FitnessViewModel : ViewModel() {
                 } else {
                     message
                 }
+                workoutsError.value = errorMessage
+                isLoadingWorkouts.value = false
             }
         )
     }

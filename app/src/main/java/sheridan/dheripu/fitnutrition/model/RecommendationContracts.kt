@@ -15,7 +15,9 @@ data class MealHistoryItem(
     val name: String,
     val calories: Int,
     val proteinGrams: Double,
-    val loggedAtEpochMillis: Long
+    val loggedAtEpochMillis: Long,
+    /** 0 when the meal was logged by hand rather than from a recipe. */
+    val recipeId: Int = 0
 )
 
 data class WorkoutRecommendationContext(
@@ -31,7 +33,8 @@ data class WorkoutHistoryItem(
     val sets: Int,
     val repetitions: Int,
     val durationMinutes: Int,
-    val completedAtEpochMillis: Long
+    val completedAtEpochMillis: Long,
+    val bodyPart: String = ""
 )
 
 data class RecommendationRequest<T>(
@@ -44,7 +47,22 @@ data class RecommendationRequest<T>(
 data class RecommendationResponse<T>(
     val schemaVersion: Int = 1,
     val recommendations: List<T>,
-    val rationale: String
+    val rationale: String,
+    /**
+     * Something the user should know even though suggestions were produced, such as candidates
+     * their profile excluded. Shown alongside the results; [rationale] only surfaces when there
+     * are none.
+     */
+    val advisory: String? = null,
+    /**
+     * The next best candidates, ranked, that did not make the shown list.
+     *
+     * Reason: dismissing a suggestion used to leave a gap, and five dismissals left none at
+     * all, with a refresh offering nothing because the same page came back and everything on
+     * it was suppressed. Keeping the remainder means a dismissal can be filled from what the
+     * engine already ranked, with no second request.
+     */
+    val reserves: List<T> = emptyList()
 )
 
 data class MealSuggestion(
@@ -101,7 +119,13 @@ object RecommendationContextFactory {
             dietaryRestrictions = profile.dietaryRestrictions,
             recentMeals = history.sortedByDescending { it.loggedAt }
                 .take(MAX_HISTORY_ITEMS).map {
-                MealHistoryItem(it.mealName, it.calories, it.proteinGrams, it.loggedAt)
+                MealHistoryItem(
+                    name = it.mealName,
+                    calories = it.calories,
+                    proteinGrams = it.proteinGrams,
+                    loggedAtEpochMillis = it.loggedAt,
+                    recipeId = it.recipeId
+                )
             },
             historyNote = historyWarning ?: history.takeIf { it.isEmpty() }
                 ?.let { "No meal history yet; use profile preferences and targets only." }
@@ -140,7 +164,8 @@ object RecommendationContextFactory {
                     sets = it.sets,
                     repetitions = it.reps,
                     durationMinutes = it.time,
-                    completedAtEpochMillis = it.completedAt
+                    completedAtEpochMillis = it.completedAt,
+                    bodyPart = it.exercise.bodyPart
                 )
             },
             historyNote = historyWarning ?: history.takeIf { it.isEmpty() }

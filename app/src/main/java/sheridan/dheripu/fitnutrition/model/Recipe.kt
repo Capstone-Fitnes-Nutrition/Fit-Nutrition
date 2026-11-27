@@ -47,5 +47,7 @@ data class RecipeFilters(
     val diet: String? = null,
     val intolerances: List<String> = emptyList(),
     val includeIngredients: List<String> = emptyList(),
-    val excludeIngredients: List<String> = emptyList()
+    val excludeIngredients: List<String> = emptyList(),
+    /** Which page of results to ask for, so a refresh can see candidates it has not ranked. */
+    val offset: Int = 0
 )

@@ -4,6 +4,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,6 +27,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -32,7 +35,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import sheridan.dheripu.fitnutrition.AuthManager
 import sheridan.dheripu.fitnutrition.data.ProfileViewModel
@@ -59,7 +62,7 @@ fun ProfileScreen(
     profileViewModel: ProfileViewModel = viewModel()
 ) {
     val currentUser = AuthManager.currentUser
-    val uiState by profileViewModel.uiState.collectAsState()
+    val uiState by profileViewModel.uiState.collectAsStateWithLifecycle()
     var isEditing by rememberSaveable { mutableStateOf(false) }
 
     var name by rememberSaveable { mutableStateOf("") }
@@ -230,6 +233,17 @@ fun ProfileScreen(
 @Composable
 private fun ProfileSummary(profile: User?, email: String, onEdit: () -> Unit) {
     val displayValue = { value: String -> value.ifBlank { "Not set" } }
+    // Reason: the stored word is the one the engines match on, which is not always the one
+    // the user tapped — they chose Dumbbells and Peanuts, and the profile holds dumbbell and
+    // peanut. Reading back the label keeps the summary honest about what was picked.
+    val listValue = { values: List<String>?, options: List<ChipOption>, ifEmpty: String ->
+        values.orEmpty().filter(String::isNotBlank)
+            .joinToString(", ") { stored ->
+                options.firstOrNull { it.value.equals(stored, ignoreCase = true) }?.label
+                    ?: stored.replaceFirstChar(Char::uppercase)
+            }
+            .ifBlank { ifEmpty }
+    }
 
     Card(
         modifier = Modifier
@@ -252,8 +266,13 @@ private fun ProfileSummary(profile: User?, email: String, onEdit: () -> Unit) {
             )
             Spacer(modifier = Modifier.height(16.dp))
             ProfileValue("Fitness goal", displayValue(profile?.fitnessGoal.orEmpty()))
+            ProfileValue("Activity level", displayValue(profile?.activityLevel.orEmpty()))
             ProfileValue("Weight", profile?.weight?.takeIf { it.isNotBlank() }?.plus(" kg") ?: "Not set")
             ProfileValue("Height", profile?.height?.takeIf { it.isNotBlank() }?.plus(" cm") ?: "Not set")
+            ProfileValue(
+                "Equipment",
+                listValue(profile?.availableEquipment, WORKOUT_EQUIPMENT, "Not set")
+            )
         }
     }
 
@@ -267,6 +286,23 @@ private fun ProfileSummary(profile: User?, email: String, onEdit: () -> Unit) {
                 text = "Nutrition preferences",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
+            )
+            // Reason: this card held nothing but its own heading. Every value in it is asked
+            // for in the editor and used by the meal engine, so there was no way to check
+            // what the suggestions were being ranked against without opening the editor.
+            Spacer(modifier = Modifier.height(12.dp))
+            ProfileValue("Dietary preference", displayValue(profile?.dietaryPreference.orEmpty()))
+            ProfileValue(
+                "Avoids",
+                listValue(profile?.dietaryRestrictions, DIETARY_RESTRICTIONS, "Nothing")
+            )
+            ProfileValue(
+                "Daily calories",
+                profile?.dailyCalorieTarget?.takeIf { it.isNotBlank() }?.plus(" kcal") ?: "Not set"
+            )
+            ProfileValue(
+                "Daily protein",
+                profile?.dailyProteinTarget?.takeIf { it.isNotBlank() }?.plus(" g") ?: "Not set"
             )
         }
     }
@@ -426,19 +462,21 @@ private fun ProfileEditor(
                 options = dietaryPreferences,
                 onSelected = onDietaryPreferenceChange
             )
-            Spacer(modifier = Modifier.height(12.dp))
-            OutlinedTextField(
-                value = dietaryRestrictions,
-                onValueChange = onDietaryRestrictionsChange,
-                label = { Text("Dietary restrictions (comma separated)") },
-                modifier = Modifier.fillMaxWidth()
+            Spacer(modifier = Modifier.height(16.dp))
+            MultiSelectField(
+                label = "Dietary restrictions",
+                help = "Anything here is excluded from meal suggestions.",
+                options = DIETARY_RESTRICTIONS,
+                selected = dietaryRestrictions,
+                onChange = onDietaryRestrictionsChange
             )
-            Spacer(modifier = Modifier.height(12.dp))
-            OutlinedTextField(
-                value = availableEquipment,
-                onValueChange = onAvailableEquipmentChange,
-                label = { Text("Available workout equipment (comma separated)") },
-                modifier = Modifier.fillMaxWidth()
+            Spacer(modifier = Modifier.height(16.dp))
+            MultiSelectField(
+                label = "Available workout equipment",
+                help = "Exercises needing anything else are left out.",
+                options = WORKOUT_EQUIPMENT,
+                selected = availableEquipment,
+                onChange = onAvailableEquipmentChange
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -528,3 +566,111 @@ private fun ProfileErrorCard(message: String, onRetry: () -> Unit) {
         }
     }
 }
+
+/**
+ * One choice in a [MultiSelectField]: what the user reads, and what gets stored.
+ *
+ * Reason: the two differ where the stored word has to match a vocabulary the user does not
+ * see. "Resistance band" reads better than "band", but the exercise API calls it band and the
+ * equipment filter matches on that; storing the label would quietly exclude every band
+ * exercise. Same for "Jump rope" against rope, and "Full gym", which the filter treats as
+ * owning everything.
+ */
+private data class ChipOption(val label: String, val value: String = label)
+
+/**
+ * A comma-separated field the user picks from instead of typing.
+ *
+ * These fed the recommendation engines directly, and a typo or a plural the vocabulary did not
+ * know simply failed to match, with nothing on screen to say so: "dumbells" excluded every
+ * dumbbell exercise exactly as if the user owned none. Picking from a list cannot be spelled
+ * wrong.
+ *
+ * Anything already saved that is not on the list is kept and shown as a selected chip, so a
+ * profile filled in before this existed does not quietly lose what it had.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MultiSelectField(
+    label: String,
+    help: String,
+    options: List<ChipOption>,
+    selected: String,
+    onChange: (String) -> Unit
+) {
+    val chosen = selected.split(",").map(String::trim).filter(String::isNotEmpty)
+    val known = options.map { it.value.lowercase() }
+    val extras = chosen.filterNot { it.lowercase() in known }
+
+    fun toggle(value: String) {
+        val isOn = chosen.any { it.equals(value, ignoreCase = true) }
+        val next = if (isOn) {
+            chosen.filterNot { it.equals(value, ignoreCase = true) }
+        } else {
+            chosen + value
+        }
+        onChange(next.joinToString(", "))
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        Text(
+            text = help,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp, bottom = 8.dp)
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            options.forEach { option ->
+                FilterChip(
+                    selected = chosen.any { it.equals(option.value, ignoreCase = true) },
+                    onClick = { toggle(option.value) },
+                    label = { Text(option.label) }
+                )
+            }
+            extras.forEach { extra ->
+                FilterChip(
+                    selected = true,
+                    onClick = { toggle(extra) },
+                    label = { Text(extra) }
+                )
+            }
+        }
+    }
+}
+
+/** Matches the vocabulary MealRules maps onto Spoonacular's intolerances. */
+private val DIETARY_RESTRICTIONS = listOf(
+    ChipOption("Dairy"),
+    ChipOption("Eggs", "egg"),
+    ChipOption("Gluten"),
+    ChipOption("Grain"),
+    ChipOption("Peanuts", "peanut"),
+    ChipOption("Seafood"),
+    ChipOption("Sesame"),
+    ChipOption("Shellfish"),
+    ChipOption("Soy"),
+    ChipOption("Sulfites", "sulfite"),
+    ChipOption("Tree nuts", "tree nut"),
+    ChipOption("Wheat")
+).map { ChipOption(it.label, it.value.lowercase()) }
+
+/** The words the exercise API uses, so WorkoutRules.hasEquipment can match them. */
+private val WORKOUT_EQUIPMENT = listOf(
+    ChipOption("Body weight", "body weight"),
+    ChipOption("Dumbbells", "dumbbell"),
+    ChipOption("Barbell", "barbell"),
+    ChipOption("Kettlebell", "kettlebell"),
+    ChipOption("Resistance band", "band"),
+    ChipOption("Cable machine", "cable"),
+    ChipOption("Leverage machine", "leverage machine"),
+    ChipOption("Smith machine", "smith machine"),
+    ChipOption("Stability ball", "stability ball"),
+    ChipOption("Medicine ball", "medicine ball"),
+    ChipOption("Jump rope", "rope"),
+    ChipOption("Stationary bike", "stationary bike"),
+    ChipOption("Full gym", "gym")
+)

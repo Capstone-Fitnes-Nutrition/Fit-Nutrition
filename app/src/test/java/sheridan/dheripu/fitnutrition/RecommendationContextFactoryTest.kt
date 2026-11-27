@@ -15,7 +15,6 @@ import sheridan.dheripu.fitnutrition.model.WorkoutSuggestion
 import sheridan.dheripu.fitnutrition.model.WorkoutExerciseSuggestion
 import sheridan.dheripu.fitnutrition.model.User
 import sheridan.dheripu.fitnutrition.model.WorkoutItem
-import sheridan.dheripu.fitnutrition.ui.screens.RecommendationDemoFormatter
 
 class RecommendationContextFactoryTest {
     @Test
@@ -87,26 +86,6 @@ class RecommendationContextFactoryTest {
     }
 
     @Test
-    fun mealDemoUsesReadableFormattingAndPromptsForMissingProfileFields() {
-        val incomplete = RecommendationContextFactory.meal(User(), emptyList())
-        val prompt = RecommendationDemoFormatter.meal(incomplete)
-
-        assertTrue(prompt.contains("Choose a dietary preference"))
-        assertTrue(prompt.contains("Open Profile → Edit Profile"))
-
-        val ready = RecommendationContextFactory.meal(
-            User(dietaryPreference = "Vegetarian"),
-            emptyList()
-        )
-        val display = RecommendationDemoFormatter.meal(ready)
-        assertTrue(display.contains("Sample meal"))
-        assertTrue(display.contains("Lentil and brown rice bowl"))
-        assertTrue(display.contains("No meal history"))
-        assertTrue(!display.contains("schemaVersion"))
-        assertTrue(!display.contains("{\""))
-    }
-
-    @Test
     fun workoutRequestValidatesRequiredFieldsAndUsesRecentHistory() {
         val incomplete = RecommendationContextFactory.workout(User(), emptyList())
         assertEquals(
@@ -154,30 +133,6 @@ class RecommendationContextFactoryTest {
         val context = (ready as ContextPreparation.Ready).value.context
         assertTrue(context.recentWorkouts.isEmpty())
         assertTrue(context.historyNote?.contains("No workout history") == true)
-    }
-
-    @Test
-    fun workoutDemoPromptsForMissingFieldsAndExplainsUnavailableHistory() {
-        val incomplete = RecommendationContextFactory.workout(User(), emptyList())
-        val prompt = RecommendationDemoFormatter.workout(incomplete)
-
-        assertTrue(prompt.contains("Choose a fitness goal"))
-        assertTrue(prompt.contains("Choose an activity level"))
-        assertTrue(prompt.contains("List available workout equipment"))
-
-        val ready = RecommendationContextFactory.workout(
-            User(
-                fitnessGoal = "General Fitness",
-                activityLevel = "Moderately Active",
-                availableEquipment = listOf("Dumbbells")
-            ),
-            emptyList(),
-            historyWarning = "Workout history is unavailable; using profile data only."
-        )
-        val display = RecommendationDemoFormatter.workout(ready)
-        assertTrue(display.contains("Workout history is unavailable"))
-        assertTrue(display.contains("Goblet squat"))
-        assertTrue(!display.contains("schemaVersion"))
     }
 
     @Test

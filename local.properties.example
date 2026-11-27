@@ -1,0 +1,29 @@
+# Copy to local.properties (gitignored) and fill in your own keys, then rebuild.
+# Every value may also be supplied through an environment variable of the same name.
+#
+# sdk.dir is written by Android Studio; keep the one already in your local.properties.
+
+# Spoonacular (https://spoonacular.com/food-api). Without it the app falls back to the
+# offline sample recipes in MockRecipes.
+SPOONACULAR_API_KEY=
+
+# ExerciseDB via RapidAPI (https://rapidapi.com/justin-WFnsXH_t6/api/exercisedb).
+# Without it the Fitness tab reports that the exercise API key is missing.
+EXERCISE_API_KEY=
+# Optional, defaults to exercisedb.p.rapidapi.com
+EXERCISE_API_HOST=
+
+# The Health tab reads Health Connect, which needs no key and no account: the user grants
+# read access per data type on the device. Google decommissioned the Fitbit Web API on
+# 30 October 2026, so the FITBIT_CLIENT_ID and FITBIT_CLIENT_SECRET that used to live here
+# are gone. A Fitbit still feeds the app, through the Google Health app writing to Health
+# Connect.
+
+# Optional testing switch. true feeds the Health tab deterministic fake daily metrics
+# (steps, distance, calories, active minutes, resting heart rate, sleep) for the last 7+ days,
+# so the health alerts and the health-driven recommendations work with no watch. An emulator
+# on Android 14 or later does have Health Connect, but nothing writes to it there, so the
+# metrics come back empty without this. Defaults to false. The Health tab has an
+# equivalent runtime switch, and the companion demo panel in tools/health-demo-panel can set
+# any day's numbers while the app is running.
+USE_MOCK_HEALTH=false

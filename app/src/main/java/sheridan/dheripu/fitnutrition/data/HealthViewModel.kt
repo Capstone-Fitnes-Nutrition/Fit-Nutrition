@@ -1,27 +1,66 @@
 package sheridan.dheripu.fitnutrition.data
 
 import android.app.Application
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
+import sheridan.dheripu.fitnutrition.BuildConfig
 import sheridan.dheripu.fitnutrition.model.HealthMetrics
-import java.text.SimpleDateFormat
-import java.util.*
+import sheridan.dheripu.fitnutrition.model.health.HealthAlert
+import sheridan.dheripu.fitnutrition.model.health.HealthAlertEvaluator
+import sheridan.dheripu.fitnutrition.repository.HealthRepository
+import sheridan.dheripu.fitnutrition.repository.MockHealthOverrideStore
+import java.time.LocalDate
+import java.time.ZoneId
 
 class HealthViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val fitbitService = FitbitService(application.applicationContext)
+    private val settings = application.applicationContext
+        .getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
 
-    // State flows for UI
+    private val realSource = HealthConnectDataSource(application.applicationContext)
+    private val mockSource = MockHealthDataSource(
+        overrides = MockHealthOverrideStore(application.applicationContext)
+    )
+    private val healthRepository = HealthRepository()
+
+    private val _useMockData = MutableStateFlow(
+        settings.getBoolean(KEY_USE_MOCK, BuildConfig.USE_MOCK_HEALTH)
+    )
+
+    /** True while the Health tab is reading the offline mock instead of Health Connect. */
+    val useMockData: StateFlow<Boolean> = _useMockData.asStateFlow()
+
+    private val source: HealthDataSource
+        get() = if (_useMockData.value) mockSource else realSource
+
+    /** What the screen must ask Health Connect for before a real sync can return anything. */
+    val requiredPermissions: Set<String> get() = source.requiredPermissions
+
     private val _isAuthenticated = MutableStateFlow(false)
     val isAuthenticated: StateFlow<Boolean> = _isAuthenticated.asStateFlow()
 
     private val _healthMetrics = MutableStateFlow<HealthMetrics?>(null)
     val healthMetrics: StateFlow<HealthMetrics?> = _healthMetrics.asStateFlow()
+
+    private val _weeklyMetrics = MutableStateFlow<List<HealthMetrics>>(emptyList())
+    val weeklyMetrics: StateFlow<List<HealthMetrics>> = _weeklyMetrics.asStateFlow()
+
+    /** BR4 and BR5 alerts, recomputed whenever today's or the week's metrics change. */
+    val alerts: StateFlow<List<HealthAlert>> =
+        combine(_healthMetrics, _weeklyMetrics) { today, week ->
+            HealthAlertEvaluator.evaluate(today, week)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), emptyList())
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -29,196 +68,159 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
-    companion object {
-        private const val TAG = "HealthViewModel"
-    }
+    /** False when the chosen source cannot work on this device, so the UI can say why. */
+    val isHealthSourceConfigured: Boolean get() = source.isConfigured
 
     init {
-        Log.d(TAG, "HealthViewModel initialized")
+        observeWeeklyHistory()
         checkAuthentication()
     }
 
     /**
-     * Check if user is authenticated with Fitbit
+     * Whether the Health tab reads the mock or a real account. Kept in SharedPreferences so the
+     * choice survives a restart, and switching resyncs straight away.
+     */
+    fun setUseMockData(enabled: Boolean) {
+        if (_useMockData.value == enabled) return
+        settings.edit().putBoolean(KEY_USE_MOCK, enabled).apply()
+        _useMockData.value = enabled
+        _healthMetrics.value = null
+        _errorMessage.value = null
+        checkAuthentication()
+    }
+
+    /**
+     * Whether the chosen source may read data right now. For Health Connect that is a
+     * permission check, so it runs off the main thread and syncs once it comes back granted.
      */
     fun checkAuthentication() {
-        val isAuth = fitbitService.isUserAuthenticated()
-        _isAuthenticated.value = isAuth
-        Log.d(TAG, "checkAuthentication: isAuthenticated = $isAuth")
-
-        if (isAuth) {
-            Log.d(TAG, "User is authenticated, fetching metrics automatically")
-            fetchHealthMetrics()
-        } else {
-            Log.d(TAG, "User is NOT authenticated")
-        }
-    }
-
-    /**
-     * Get Fitbit OAuth authorization URL
-     */
-    fun getAuthorizationUrl(): String {
-        val url = fitbitService.generateAuthorizationUrl()
-        Log.d(TAG, "Generated authorization URL: $url")
-        return url
-    }
-
-    /**
-     * Handle OAuth callback with authorization code
-     * IMPORTANT: This must be called from your MainActivity or deep link handler
-     */
-    fun handleAuthorizationCode(code: String) {
-        Log.d(TAG, "handleAuthorizationCode called with code: ${code.take(10)}...")
-
         viewModelScope.launch {
-            _isLoading.value = true
-            _errorMessage.value = null
-
-            Log.d(TAG, "Exchanging authorization code for access token...")
-            val result = fitbitService.exchangeCodeForToken(code)
-
-            result.onSuccess { authResponse ->
-                Log.d(TAG, "✅ Token exchange SUCCESS!")
-                Log.d(TAG, "User ID: ${authResponse.userId}")
-                Log.d(TAG, "Token expires in: ${authResponse.expiresIn} seconds")
-
-                _isAuthenticated.value = true
-                _errorMessage.value = "Login successful! Fetching your data..."
-
-                // Automatically fetch metrics after successful login
-                Log.d(TAG, "Auto-fetching health metrics after login...")
-                fetchHealthMetrics()
-
-            }.onFailure { exception ->
-                Log.e(TAG, "❌ Token exchange FAILED: ${exception.message}", exception)
-                _errorMessage.value = "Login failed: ${exception.message}"
-                _isAuthenticated.value = false
-            }
-
-            _isLoading.value = false
+            val connected = source.isConnected()
+            _isAuthenticated.value = connected
+            if (connected) fetchHealthMetrics()
         }
     }
 
     /**
-     * Fetch all health metrics from Fitbit
+     * Called when the user comes back from the Health Connect permission sheet. Granted or
+     * not, the answer is whatever [checkAuthentication] now finds.
      */
-    fun fetchHealthMetrics() {
-        Log.d(TAG, "fetchHealthMetrics called")
-
-        if (!_isAuthenticated.value) {
-            Log.w(TAG, "Cannot fetch metrics - user not authenticated")
-            _errorMessage.value = "Please login to Fitbit first"
+    fun onPermissionResult(granted: Set<String>) {
+        if (granted.isEmpty()) {
+            _errorMessage.value = "Health Connect access was not granted."
+            _isAuthenticated.value = false
             return
         }
+        _errorMessage.value = null
+        checkAuthentication()
+    }
 
+    /** Syncs today, then saves and backfills the rest of the week without blocking the screen. */
+    fun fetchHealthMetrics() {
+        if (!_isAuthenticated.value) {
+            _errorMessage.value = "Connect Health Connect first."
+            return
+        }
         viewModelScope.launch {
             _isLoading.value = true
             _errorMessage.value = null
-            Log.d(TAG, "Starting health metrics fetch...")
-
-            try {
-                // Fetch activity data (steps, distance, calories, active minutes)
-                Log.d(TAG, "Fetching daily activity data...")
-                val activityResult = fitbitService.fetchDailyActivity()
-
-                activityResult.onSuccess { activityMetrics ->
-                    Log.d(TAG, "✅ Activity data received:")
-                    Log.d(TAG, "  Steps: ${activityMetrics.steps}")
-                    Log.d(TAG, "  Distance: ${activityMetrics.distance} km")
-                    Log.d(TAG, "  Calories: ${activityMetrics.calories}")
-                    Log.d(TAG, "  Active Minutes: ${activityMetrics.activeMinutes}")
-
-                    // Fetch heart rate data
-                    Log.d(TAG, "Fetching heart rate data...")
-                    val heartRateResult = fitbitService.fetchHeartRateData()
-
-                    heartRateResult.onSuccess { heartRate ->
-                        Log.d(TAG, "✅ Heart rate received: $heartRate bpm")
-
-                        // Combine all data
-                        val combinedMetrics = activityMetrics.copy(
-                            heartRate = heartRate,
-                            lastSyncTime = getCurrentTimeString(),
-                            activityLevel = calculateActivityLevel(activityMetrics.steps, activityMetrics.activeMinutes)
-                        )
-
-                        _healthMetrics.value = combinedMetrics
-                        Log.d(TAG, "✅ All metrics combined and updated in UI")
-                        Log.d(TAG, "Activity Level: ${combinedMetrics.activityLevel}")
-
-                    }.onFailure { exception ->
-                        Log.w(TAG, "⚠️ Heart rate fetch failed: ${exception.message}")
-                        // Still show activity data even if heart rate fails
-                        val metricsWithoutHR = activityMetrics.copy(
-                            lastSyncTime = getCurrentTimeString(),
-                            activityLevel = calculateActivityLevel(activityMetrics.steps, activityMetrics.activeMinutes)
-                        )
-                        _healthMetrics.value = metricsWithoutHR
-                        _errorMessage.value = "Could not fetch heart rate: ${exception.message}"
-                    }
-
-                }.onFailure { exception ->
-                    Log.e(TAG, "❌ Activity fetch failed: ${exception.message}", exception)
-                    _errorMessage.value = "Failed to fetch activity data: ${exception.message}"
-
-                    // Check if token expired
-                    if (exception.message?.contains("401") == true ||
-                        exception.message?.contains("Unauthorized") == true) {
-                        Log.w(TAG, "Token expired or unauthorized - logging out")
-                        _isAuthenticated.value = false
-                        _errorMessage.value = "Session expired. Please login again."
-                    }
+            val result = source.fetchDay(today())
+            // Reason: the spinner ends when the numbers are in hand. It used to wait for the
+            // Realtime Database write too, so a database that never answered left the tab
+            // spinning over metrics it had already loaded, and the offline mock could not be
+            // demonstrated at all.
+            _isLoading.value = false
+            result
+                .onSuccess { metrics ->
+                    _healthMetrics.value = metrics
+                    persistInBackground(metrics)
                 }
+                .onFailure { error ->
+                    _errorMessage.value = error.message ?: "Could not sync your health data."
+                }
+        }
+    }
 
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Unexpected error: ${e.message}", e)
-                _errorMessage.value = "Unexpected error: ${e.message}"
+    /** Storing history is a background concern; the user never waits on it. */
+    private fun persistInBackground(today: HealthMetrics) {
+        viewModelScope.launch {
+            saveToHistory(today)
+            val days = source.fetchRecentDays(HISTORY_DAYS)
+            showLocally(days)
+            days.forEach { saveToHistory(it) }
+        }
+    }
+
+    /** Pulls the last [HISTORY_DAYS] days and stores each one, so the week view has history. */
+    fun syncRecentDays() {
+        viewModelScope.launch {
+            _isLoading.value = true
+            val days = try {
+                source.fetchRecentDays(HISTORY_DAYS)
             } finally {
                 _isLoading.value = false
-                Log.d(TAG, "fetchHealthMetrics completed")
             }
+            if (days.isEmpty()) {
+                _errorMessage.value = "No health data for the last week."
+                return@launch
+            }
+            days.firstOrNull { it.date == today() }?.let { _healthMetrics.value = it }
+            showLocally(days)
+            days.forEach { saveToHistory(it) }
         }
     }
 
     /**
-     * Logout from Fitbit and clear all data
+     * Shows the fetched week straight away instead of waiting for it to round-trip through the
+     * Realtime Database. The database listener still wins once it reports, and it is the only
+     * source of days this session did not fetch.
      */
+    private fun showLocally(days: List<HealthMetrics>) {
+        if (days.isEmpty()) return
+        val byDate = (days + _weeklyMetrics.value).associateBy { it.date }
+        _weeklyMetrics.value = byDate.values.sortedByDescending { it.date }.take(HISTORY_DAYS)
+    }
+
+    private suspend fun saveToHistory(metrics: HealthMetrics) {
+        // Reason: saveHealthMetrics only emits when Firebase calls back. Unreachable rules or
+        // no network meant it never did, and the caller suspended for good.
+        val saved = withTimeoutOrNull(SAVE_TIMEOUT_MILLIS) {
+            healthRepository.saveHealthMetrics(metrics).first()
+        }
+        when {
+            saved == null -> Log.w(TAG, "Timed out saving health history for ${metrics.date}")
+            saved.isFailure -> Log.w(TAG, "Could not save health history: ${saved.exceptionOrNull()?.message}")
+        }
+    }
+
+    private fun observeWeeklyHistory() {
+        viewModelScope.launch {
+            healthRepository.getWeeklyHealthMetrics().collect { result ->
+                result.onSuccess { _weeklyMetrics.value = it }
+                    .onFailure { Log.w(TAG, "Weekly history unavailable: ${it.message}") }
+            }
+        }
+    }
+
     fun logout() {
-        Log.d(TAG, "Logging out user")
-        fitbitService.clearFitbitUser()
+        source.disconnect()
         _isAuthenticated.value = false
         _healthMetrics.value = null
         _errorMessage.value = null
-        Log.d(TAG, "Logout complete - all data cleared")
     }
 
-    /**
-     * Clear error message
-     */
     fun clearError() {
-        Log.d(TAG, "Clearing error message")
         _errorMessage.value = null
     }
 
-    /**
-     * Calculate activity level based on steps and active minutes
-     */
-    private fun calculateActivityLevel(steps: Int, activeMinutes: Int): String {
-        val level = when {
-            steps >= 10000 && activeMinutes >= 30 -> "HIGH"
-            steps >= 5000 && activeMinutes >= 15 -> "MODERATE"
-            steps >= 2500 -> "LOW"
-            else -> "SEDENTARY"
-        }
-        Log.d(TAG, "Calculated activity level: $level (steps=$steps, activeMin=$activeMinutes)")
-        return level
-    }
+    private fun today(): String = LocalDate.now(ZoneId.systemDefault()).toString()
 
-    /**
-     * Get current time as formatted string
-     */
-    private fun getCurrentTimeString(): String {
-        val formatter = SimpleDateFormat("MMM dd, yyyy 'at' hh:mm a", Locale.getDefault())
-        return formatter.format(Date())
+    companion object {
+        private const val TAG = "HealthViewModel"
+        private const val STOP_TIMEOUT_MILLIS = 5_000L
+        private const val HISTORY_DAYS = 7
+        private const val SAVE_TIMEOUT_MILLIS = 5_000L
+        private const val SETTINGS_PREFS = "health_settings"
+        private const val KEY_USE_MOCK = "use_mock_health"
     }
 }

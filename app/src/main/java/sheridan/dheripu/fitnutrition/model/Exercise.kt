@@ -6,5 +6,6 @@ data class Exercise (
     val bodyPart: String = "",
     val target: String = "",
     val instructions: List<String> = emptyList(),
+    val equipment: String = "",
 )
 

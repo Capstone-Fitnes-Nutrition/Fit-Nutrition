@@ -1,5 +1,16 @@
 import java.util.Properties
-val properties = Properties()
+
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) {
+        file.inputStream().use { load(it) }
+    }
+}
+
+fun secret(name: String): String = localProperties.getProperty(name)
+    ?: System.getenv(name)
+    ?: ""
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -20,12 +31,18 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        buildConfigField("String", "FITBIT_CLIENT_ID",
-            "\"${properties.getProperty("FITBIT_CLIENT_ID")}\"")
-        buildConfigField("String", "FITBIT_CLIENT_SECRET",
-            "\"${properties.getProperty("FITBIT_CLIENT_SECRET")}\"")
-        buildConfigField("String", "FITBIT_REDIRECT_URI",
-            "\"${properties.getProperty("FITBIT_REDIRECT_URI")}\"")
+        buildConfigField("String", "SPOONACULAR_API_KEY",
+            "\"${secret("SPOONACULAR_API_KEY")}\"")
+        buildConfigField("String", "EXERCISE_API_KEY",
+            "\"${secret("EXERCISE_API_KEY")}\"")
+        buildConfigField("String", "EXERCISE_API_HOST",
+            "\"${secret("EXERCISE_API_HOST").ifBlank { "exercisedb.p.rapidapi.com" }}\"")
+        // Off by default. Set USE_MOCK_HEALTH=true in local.properties to feed the Health tab
+        // realistic fake daily metrics instead of reading Health Connect. The Health tab also
+        // has a runtime switch, so testing it needs no rebuild. Health Connect is unavailable
+        // on an emulator without the platform app, so the mock is the only source there.
+        buildConfigField("boolean", "USE_MOCK_HEALTH",
+            secret("USE_MOCK_HEALTH").equals("true", ignoreCase = true).toString())
     }
 
     buildTypes {
@@ -97,7 +114,10 @@ dependencies {
     implementation(libs.material)
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.health.connect.client)
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform("androidx.compose:compose-bom:2024.03.00"))
