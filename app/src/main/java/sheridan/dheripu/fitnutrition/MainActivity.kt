@@ -98,7 +98,7 @@ fun FitNutritionApp(healthViewModel: HealthViewModel) {
         kotlinx.coroutines.delay(1500)
         showSplash = false
         appState = if (AuthManager.isUserLoggedIn) {
-            AppState.MainApp
+            AppState.MainApp()
         } else {
             AppState.Auth
         }
@@ -123,18 +123,19 @@ fun FitNutritionApp(healthViewModel: HealthViewModel) {
             }
             AppState.Auth -> {
                 AuthNavigation(
-                    onAuthSuccess = { appState = AppState.MainApp }
+                    onAuthSuccess = { appState = AppState.MainApp() }
                 )
             }
-            AppState.MainApp -> {
+            is AppState.MainApp -> {
                 MainAppScreen(
                     healthViewModel = healthViewModel,
+                    initialRoute = (appState as AppState.MainApp).selectedRoute,
                     onLogout = {
                         AuthManager.logout()
                         appState = AppState.Auth
                     },
-                    onNavigateToRecipeDetail = { recipeId ->
-                        appState = AppState.RecipeDetail(recipeId)
+                    onNavigateToRecipeDetail = { recipeId, returnRoute ->
+                        appState = AppState.RecipeDetail(recipeId, returnRoute)
                     },
                     onNavigateToWorkoutAnalytics = {
                         appState = AppState.WorkoutAnalytics
@@ -148,18 +149,22 @@ fun FitNutritionApp(healthViewModel: HealthViewModel) {
                 // Show recipe detail screen
                 RecipeDetailScreen(
                     recipeId = (appState as AppState.RecipeDetail).recipeId,
-                    onBackClick = { appState = AppState.MainApp }
+                    onBackClick = {
+                        appState = AppState.MainApp(
+                            (appState as AppState.RecipeDetail).returnRoute
+                        )
+                    }
                 )
             }
             is AppState.WorkoutAnalytics -> {
                 // Show workout analytics screen
                 WorkoutAnalyticsScreen(
-                    onBackClick = { appState = AppState.MainApp }
+                    onBackClick = { appState = AppState.MainApp() }
                 )
             }
             is AppState.NutritionAnalytics -> {
                 NutritionAnalyticsScreen(
-                    onBackClick = { appState = AppState.MainApp }
+                    onBackClick = { appState = AppState.MainApp() }
                 )
             }
         }
@@ -186,13 +191,14 @@ fun AuthNavigation(onAuthSuccess: () -> Unit) {
 @Composable
 fun MainAppScreen(
     healthViewModel: HealthViewModel,
-    onNavigateToRecipeDetail: (Int) -> Unit,
+    initialRoute: String,
+    onNavigateToRecipeDetail: (Int, String) -> Unit,
     onLogout: () -> Unit,
     onNavigateToWorkoutAnalytics : () -> Unit,
     onNavigateToNutritionAnalytics: () -> Unit,
 ) {
 
-    var currentRoute by remember { mutableStateOf(NavigationItem.Home.route) }
+    var currentRoute by remember(initialRoute) { mutableStateOf(initialRoute) }
     val context = LocalContext.current
 
     val navigationItems = listOf(
@@ -224,7 +230,9 @@ fun MainAppScreen(
             }
             is NavigationItem.Nutrition -> {
                 NutritionScreen(padding = Modifier.padding(innerPadding),
-                    onRecipeClick = onNavigateToRecipeDetail,
+                    onRecipeClick = { recipeId ->
+                        onNavigateToRecipeDetail(recipeId, currentScreen.route)
+                    },
                     onNavigateToNutritionAnalytics = onNavigateToNutritionAnalytics,
                     onNavigateToProfile = { currentRoute = NavigationItem.Profile.route })
             }
@@ -251,8 +259,8 @@ fun MainAppScreen(
 sealed class AppState {
     object Loading : AppState()
     object Auth : AppState()
-    object MainApp : AppState()
-    data class RecipeDetail(val recipeId: Int) : AppState()
+    data class MainApp(val selectedRoute: String = NavigationItem.Home.route) : AppState()
+    data class RecipeDetail(val recipeId: Int, val returnRoute: String) : AppState()
     object WorkoutAnalytics : AppState()
     object NutritionAnalytics : AppState()
 }
