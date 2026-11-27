@@ -32,9 +32,9 @@ fun HomeScreen(
     onNavigateToNutrition: () -> Unit,
     onNavigateToWorkoutAnalytics: () -> Unit,
     onNavigateToNutritionAnalytics: () -> Unit,
-    fitnessViewModel: FitnessViewModel = viewModel(key = AuthManager.currentUser?.uid ?: "guest"),
+    fitnessViewModel: FitnessViewModel = viewModel(key = "fitness-${AuthManager.currentUser?.uid ?: "guest"}"),
     profileViewModel: ProfileViewModel = viewModel(),
-    nutritionViewModel: NutritionViewModel = viewModel(key = AuthManager.currentUser?.uid ?: "guest")
+    nutritionViewModel: NutritionViewModel = viewModel(key = "nutrition-${AuthManager.currentUser?.uid ?: "guest"}")
 ) {
 
     val profileState by profileViewModel.uiState.collectAsState()
@@ -47,18 +47,18 @@ fun HomeScreen(
     LaunchedEffect(AuthManager.currentUser?.uid) {
         profileViewModel.loadProfile()
         nutritionViewModel.loadLogs()
+        fitnessViewModel.loadWorkouts()
+        fitnessViewModel.loadSteps()
     }
 
     val workouts = fitnessViewModel.myWorkouts.value
     val stepsState = fitnessViewModel.stepsState
 
-    LaunchedEffect(Unit) { fitnessViewModel.loadSteps() }
-
-    val todayWorkouts = remember(workouts) { buildWorkoutStats(workouts,1 )}
-    val todaySteps = remember(stepsState.entries) { buildStepsStats(stepsState.entries,1 )}
-    val todayCaloriesIn = remember(nutritionState.logs) {
-        nutritionState.logs.todayCalorieIntake()
-    }
+    // Derive the dashboard values directly from the observable sources. This avoids
+    // retaining the initial empty totals while Firestore restores cached records.
+    val todayWorkouts = buildWorkoutStats(workouts, 1)
+    val todaySteps = buildStepsStats(stepsState.entries, 1)
+    val todayCaloriesIn = nutritionState.logs.todayCalorieIntake()
 
     Column(
         modifier = padding

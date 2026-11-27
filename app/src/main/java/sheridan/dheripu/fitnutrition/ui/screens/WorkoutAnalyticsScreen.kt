@@ -78,7 +78,7 @@ data class WorkoutStats(
 @Composable
 fun WorkoutAnalyticsScreen(
     onBackClick: () -> Unit,
-    fitnessViewModel: FitnessViewModel = viewModel(key = AuthManager.currentUser?.uid ?: "guest")
+    fitnessViewModel: FitnessViewModel = viewModel(key = "fitness-${AuthManager.currentUser?.uid ?: "guest"}")
 ) {
     BackHandler { onBackClick() }
 

@@ -32,11 +32,13 @@ class FitnessViewModel : ViewModel() {
     init {
         loadWorkouts()
     }
-    private fun loadWorkouts() {
+    fun loadWorkouts() {
         val uid = AuthManager.currentUser?.uid ?:return
         workoutRepository.getWorkouts(
             userId = uid,
-            onSuccess = {myWorkouts.value = it},
+            onSuccess = {
+                myWorkouts.value = it
+            },
             onError = { message ->
                 errorMessage = if (message.contains("PERMISSION_DENIED", ignoreCase = true)) {
                     "Saved workout history isn't accessible for this account. " +
@@ -82,8 +84,12 @@ class FitnessViewModel : ViewModel() {
         stepsState = stepsState.copy(isLoading = true, errorMessage = null)
         stepsRepository.getSteps(
             uid,
-            onSuccess = { stepsState = StepsUiState(entries = it) },
-            onError = { stepsState = stepsState.copy(isLoading = false, errorMessage = "Unable to load steps") }
+            onSuccess = {
+                stepsState = StepsUiState(entries = it)
+            },
+            onError = {
+                stepsState = stepsState.copy(isLoading = false, errorMessage = "Unable to load steps")
+            }
         )
     }
 

@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import sheridan.dheripu.fitnutrition.AuthManager
 import sheridan.dheripu.fitnutrition.data.NutritionViewModel
 import sheridan.dheripu.fitnutrition.data.RecipeViewModel
 import sheridan.dheripu.fitnutrition.model.Ingredient
@@ -32,7 +33,7 @@ fun RecipeDetailScreen(
     recipeId: Int,
     onBackClick: () -> Unit,
     recipeViewModel: RecipeViewModel = viewModel(),
-    nutritionViewModel: NutritionViewModel = viewModel()
+    nutritionViewModel: NutritionViewModel = viewModel(key = "nutrition-${AuthManager.currentUser?.uid ?: "guest"}")
 ) {
     // State variables
     var recipe by remember { mutableStateOf<Recipe?>(null) }

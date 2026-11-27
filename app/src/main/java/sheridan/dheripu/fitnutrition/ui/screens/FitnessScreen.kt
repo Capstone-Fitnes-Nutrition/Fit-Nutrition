@@ -47,7 +47,7 @@ import java.util.Locale
 @Composable
 fun FitnessScreen(
     padding: Modifier = Modifier,
-    viewModel: FitnessViewModel = viewModel(key = AuthManager.currentUser?.uid ?: "guest"),
+    viewModel: FitnessViewModel = viewModel(key = "fitness-${AuthManager.currentUser?.uid ?: "guest"}"),
     onNavigateToProfile: () -> Unit,
     onNavigateToWorkoutAnalytics: () -> Unit
 ) {
