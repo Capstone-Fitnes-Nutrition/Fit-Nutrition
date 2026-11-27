@@ -19,8 +19,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import sheridan.dheripu.fitnutrition.AuthManager
 import sheridan.dheripu.fitnutrition.data.FitnessViewModel
+import sheridan.dheripu.fitnutrition.data.NutritionViewModel
 import sheridan.dheripu.fitnutrition.data.ProfileViewModel
+import sheridan.dheripu.fitnutrition.model.NutritionLog
 import sheridan.dheripu.fitnutrition.ui.components.InfoCard
+import java.util.Calendar
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -30,16 +33,21 @@ fun HomeScreen(
     onNavigateToWorkoutAnalytics: () -> Unit,
     onNavigateToNutritionAnalytics: () -> Unit,
     fitnessViewModel: FitnessViewModel = viewModel(key = AuthManager.currentUser?.uid ?: "guest"),
-    profileViewModel: ProfileViewModel = viewModel()
+    profileViewModel: ProfileViewModel = viewModel(),
+    nutritionViewModel: NutritionViewModel = viewModel(key = AuthManager.currentUser?.uid ?: "guest")
 ) {
 
     val profileState by profileViewModel.uiState.collectAsState()
+    val nutritionState by nutritionViewModel.uiState.collectAsState()
     val firstName = profileState.profile?.name
         ?.trim()
         ?.substringBefore(" ")
         .orEmpty()
 
-    LaunchedEffect(AuthManager.currentUser?.uid) {profileViewModel.loadProfile()}
+    LaunchedEffect(AuthManager.currentUser?.uid) {
+        profileViewModel.loadProfile()
+        nutritionViewModel.loadLogs()
+    }
 
     val workouts = fitnessViewModel.myWorkouts.value
     val stepsState = fitnessViewModel.stepsState
@@ -48,6 +56,9 @@ fun HomeScreen(
 
     val todayWorkouts = remember(workouts) { buildWorkoutStats(workouts,1 )}
     val todaySteps = remember(stepsState.entries) { buildStepsStats(stepsState.entries,1 )}
+    val todayCaloriesIn = remember(nutritionState.logs) {
+        nutritionState.logs.todayCalorieIntake()
+    }
 
     Column(
         modifier = padding
@@ -97,9 +108,9 @@ fun HomeScreen(
                 modifier = Modifier.weight(1f)
             )
             InfoCard(
-                title = "Daily Steps",
-                value = "${todaySteps.total}",
-                unit = "steps",
+                title = "Calories In",
+                value = todayCaloriesIn.toString(),
+                unit = "kcal",
                 modifier = Modifier.weight(1f)
             )
         }
@@ -112,9 +123,9 @@ fun HomeScreen(
                 modifier = Modifier.weight(1f)
             )
             InfoCard(
-                title = "Water",
-                value = "1.8",
-                unit = "L",
+                title = "Daily Steps",
+                value = "${todaySteps.total}",
+                unit = "steps",
                 modifier = Modifier.weight(1f)
             )
         }
@@ -211,4 +222,16 @@ fun HomeScreen(
             )
         }
     }
+}
+
+private fun List<NutritionLog>.todayCalorieIntake(): Int {
+    val startOfToday = Calendar.getInstance().run {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+        timeInMillis
+    }
+
+    return filter { it.loggedAt >= startOfToday }.sumOf { it.calories }
 }
