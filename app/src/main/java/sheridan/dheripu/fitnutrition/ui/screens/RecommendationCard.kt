@@ -2,15 +2,19 @@ package sheridan.dheripu.fitnutrition.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -18,8 +22,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import sheridan.dheripu.fitnutrition.data.RecommendationUiState
@@ -33,11 +39,20 @@ import sheridan.dheripu.fitnutrition.model.recommendation.ScoredRecommendation
 private data class SuggestionRow(
     val id: String,
     val title: String,
+    val metric: SuggestionMetric,
     val summary: String,
     val reasons: List<String>,
     val handled: Boolean
 )
 
+/**
+ * The suggestions card for a screen.
+ *
+ * Takes its placement from [modifier] and adds no outer padding of its own, so it lines up
+ * with whatever else the screen is showing. It used to inset itself by 16dp on top of the
+ * list's own padding, which left it sitting further in from the edge than every card beside
+ * it on the Fitness tab.
+ */
 @Composable
 fun RecommendationCard(
     title: String,
@@ -51,16 +66,24 @@ fun RecommendationCard(
     onDismissUndo: () -> Unit = {},
     onNavigateToProfile: () -> Unit = {}
 ) {
-    Card(modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+    Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(
-                "Ranked for your goal, targets, history, and past feedback.",
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
-            )
-            Button(onClick = onGenerate, enabled = state != RecommendationUiState.Loading) {
-                Text(if (state is RecommendationUiState.Idle) "Get suggestions" else "Refresh")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                TextButton(
+                    onClick = onGenerate,
+                    enabled = state != RecommendationUiState.Loading
+                ) {
+                    Text(if (state is RecommendationUiState.Idle) "Suggest" else "Refresh")
+                }
             }
             RecommendationBody(
                 state, acceptLabel, onAccept, onDismiss, onRestore, onDismissUndo,
@@ -80,9 +103,14 @@ private fun RecommendationBody(
     onDismissUndo: () -> Unit,
     onNavigateToProfile: () -> Unit
 ) {
-    val bodyModifier = Modifier.padding(top = 12.dp)
+    val bodyModifier = Modifier.padding(top = 8.dp)
     when (state) {
-        RecommendationUiState.Idle -> Unit
+        RecommendationUiState.Idle -> Text(
+            text = "Ranked against your goal, targets, history and past feedback.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = bodyModifier
+        )
         RecommendationUiState.Loading -> CircularProgressIndicator(modifier = bodyModifier)
         RecommendationUiState.SignedOut ->
             Text("Sign in to get personalized suggestions.", modifier = bodyModifier)
@@ -128,18 +156,21 @@ private fun RecommendationBody(
 private fun ScoredRecommendation<MealPick>.mealRow(handledIds: Set<String>) = SuggestionRow(
     id = recommendationId,
     title = item.recipe.title,
+    metric = RecommendationText.metric(item),
     summary = RecommendationText.summary(item),
     reasons = reasons,
     handled = recommendationId in handledIds
 )
 
-private fun ScoredRecommendation<PrescribedExercise>.workoutRow(handledIds: Set<String>) = SuggestionRow(
-    id = recommendationId,
-    title = item.exercise.name.replaceFirstChar(Char::uppercase),
-    summary = RecommendationText.summary(item),
-    reasons = reasons,
-    handled = recommendationId in handledIds
-)
+private fun ScoredRecommendation<PrescribedExercise>.workoutRow(handledIds: Set<String>) =
+    SuggestionRow(
+        id = recommendationId,
+        title = item.exercise.name.replaceFirstChar(Char::uppercase),
+        metric = RecommendationText.metric(item),
+        summary = RecommendationText.summary(item),
+        reasons = reasons,
+        handled = recommendationId in handledIds
+    )
 
 @Composable
 private fun SuggestionList(
@@ -155,12 +186,26 @@ private fun SuggestionList(
     onDismissUndo: () -> Unit
 ) {
     Column(
-        modifier = Modifier.padding(top = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        modifier = Modifier.padding(top = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        note?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-        notice?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+        if (note != null || notice != null) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                notice?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+                note?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
         dismissedRows.firstOrNull { it.id == undoableId }?.let { undoable ->
             UndoRow(
@@ -169,10 +214,9 @@ private fun SuggestionList(
                 onHide = onDismissUndo
             )
         }
-        rows.forEach { row ->
-            HorizontalDivider()
-            SuggestionItem(row, acceptLabel, onAccept, onDismiss)
-        }
+        // Reason: spacing separates these, not rules. A divider between every suggestion drew
+        // more lines than there were suggestions, and the card already bounds the group.
+        rows.forEach { row -> SuggestionItem(row, acceptLabel, onAccept, onDismiss) }
         if (dismissedRows.isNotEmpty()) {
             HorizontalDivider()
             DismissedSection(dismissedRows, onRestore)
@@ -186,16 +230,22 @@ private fun SuggestionList(
  */
 @Composable
 private fun UndoRow(title: String, onUndo: () -> Unit, onHide: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Text(
-            text = "Hid $title.",
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(top = 12.dp)
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            modifier = Modifier.padding(start = 12.dp, end = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Hid $title.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
+            )
             TextButton(onClick = onUndo) { Text("Undo") }
             TextButton(onClick = onHide) { Text("OK") }
         }
@@ -207,18 +257,28 @@ private fun UndoRow(title: String, onUndo: () -> Unit, onHide: () -> Unit) {
 private fun DismissedSection(rows: List<SuggestionRow>, onRestore: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Column {
-        TextButton(onClick = { expanded = !expanded }) {
+        TextButton(
+            onClick = { expanded = !expanded },
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                horizontal = 0.dp, vertical = 8.dp
+            )
+        ) {
             Text(if (expanded) "Hide dismissed (${rows.size})" else "Dismissed (${rows.size})")
         }
         if (expanded) {
             rows.forEach { row ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.padding(top = 12.dp)) {
+                    Column(modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
                         Text(row.title, style = MaterialTheme.typography.bodyMedium)
-                        Text(row.summary, style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            row.summary,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                     TextButton(onClick = { onRestore(row.id) }) { Text("Restore") }
                 }
@@ -227,6 +287,7 @@ private fun DismissedSection(rows: List<SuggestionRow>, onRestore: (String) -> U
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SuggestionItem(
     row: SuggestionRow,
@@ -234,40 +295,97 @@ private fun SuggestionItem(
     onAccept: (String) -> Unit,
     onDismiss: (String) -> Unit
 ) {
-    Column {
-        Text(row.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-        Text(row.summary, style = MaterialTheme.typography.bodyMedium)
-        row.reasons.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall) }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = row.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = row.metric.detail,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            // Reason: the figure the user actually chooses on, pulled out of the run-on
+            // summary line and given the weight it was always carrying.
+            Text(
+                text = row.metric.lead,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+                textAlign = TextAlign.End
+            )
+        }
+        if (row.reasons.isNotEmpty()) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                row.reasons.forEach { reason -> ReasonTag(reason) }
+            }
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             if (row.handled) {
-                Text("Logged", style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(vertical = 12.dp))
+                Text(
+                    text = "Logged",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
             } else {
-                TextButton(onClick = { onAccept(row.id) }) { Text(acceptLabel) }
+                FilledTonalButton(onClick = { onAccept(row.id) }) { Text(acceptLabel) }
                 TextButton(onClick = { onDismiss(row.id) }) { Text("Not for me") }
             }
         }
     }
 }
 
+/** A single reason the engine gave, shown as a tag rather than a bulleted line. */
+@Composable
+private fun ReasonTag(reason: String) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer
+    ) {
+        Text(
+            text = reason,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+        )
+    }
+}
+
 @Preview(showBackground = true)
 @Composable
 private fun RecommendationCardPreview() {
-    val pushUp = PrescribedExercise(Exercise(id = "1", name = "push up", bodyPart = "chest"),
-        sets = 3, reps = 12, durationMinutes = 0)
+    val pushUp = PrescribedExercise(
+        Exercise(id = "1", name = "push up", bodyPart = "chest", equipment = "body weight"),
+        sets = 3, reps = 12, durationMinutes = 0
+    )
     RecommendationCard(
         title = "Workout recommendation",
         state = RecommendationUiState.Workout(
             items = listOf(
-                ScoredRecommendation("workout-1", "1", pushUp, ScoreBreakdown(0.8, emptyMap()),
-                    listOf("Your chest is rested", "Matched to your current level"), emptyList())
+                ScoredRecommendation(
+                    "workout-1", "1", pushUp, ScoreBreakdown(0.8, emptyMap()),
+                    listOf("Your chest is rested", "Matched to your current level"), emptyList()
+                )
             ),
             note = "Using today's synced activity level (MODERATE)."
         ),
         acceptLabel = "Done",
         onGenerate = {},
         onAccept = {},
-        onDismiss = {}
+        onDismiss = {},
+        modifier = Modifier.padding(16.dp)
     )
 }

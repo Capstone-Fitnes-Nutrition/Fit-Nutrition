@@ -15,6 +15,56 @@ class MealRecommendationEngineTest {
     private val engine = MealRecommendationEngine(zone = ZoneOffset.UTC)
 
     @Test
+    fun prefersTheRecipeOnTheProteinTargetOverOneCarryingFarMore() {
+        // Reason: protein fit used to be the ratio capped at 1, so both of these scored a flat
+        // 1.0 and the order fell to the id tiebreak. Only the calorie fit differs otherwise,
+        // and these two are equally far from the target.
+        val candidates = listOf(
+            recipe(1, "Protein Overload", calories = 700.0, protein = 160.0),
+            recipe(2, "On Target", calories = 700.0, protein = 42.0)
+        )
+
+        val result = engine.recommend(context(), candidates, UserPreferenceProfile(), NOW)
+
+        assertEquals(2, result.recommendations.first().item.recipe.id)
+    }
+
+    @Test
+    fun ranksAFatHeavyPlateBelowABalancedOneOfTheSameCalories() {
+        val candidates = listOf(
+            // 85% of its energy from fat, and the same calories and protein as the other.
+            recipe(1, "Buttered Everything", calories = 700.0, protein = 30.0,
+                fat = 66.0, carbohydrates = 5.0),
+            recipe(2, "Balanced Plate", calories = 700.0, protein = 30.0,
+                fat = 20.0, carbohydrates = 80.0)
+        )
+
+        val result = engine.recommend(context(), candidates, UserPreferenceProfile(), NOW)
+
+        assertEquals(2, result.recommendations.first().item.recipe.id)
+        assertTrue(result.recommendations.first().reasons.any { it.contains("Balanced macros") })
+    }
+
+    @Test
+    fun scoresARecipeWithNoMacroDataNeutrallyRatherThanAsFatHeavy() {
+        val withMacros = recipe(1, "Balanced Plate", calories = 700.0, protein = 42.0)
+        val noMacros = withMacros.copy(
+            id = 2,
+            title = "Unknown Macros",
+            nutrition = Nutrition(
+                listOf(Nutrient("Calories", 700.0, "kcal"), Nutrient("Protein", 42.0, "g"))
+            )
+        )
+
+        val result = engine.recommend(
+            context(), listOf(withMacros, noMacros), UserPreferenceProfile(), NOW
+        )
+
+        // Both are offered; the one with known balanced macros simply ranks first.
+        assertEquals(listOf(1, 2), result.recommendations.map { it.item.recipe.id })
+    }
+
+    @Test
     fun excludesRecipesThatBreakRestrictionsOrPreference() {
         val context = context(preference = "Vegetarian", restrictions = listOf("Peanuts"))
         val candidates = listOf(
@@ -53,7 +103,6 @@ class MealRecommendationEngineTest {
         val pick = result.recommendations.single()
         assertEquals(2.0, pick.item.servings, 0.0001)
         assertEquals(600, pick.item.calories)
-        assertTrue(pick.reasons.any { it.contains("2 servings") })
     }
 
     @Test
@@ -98,7 +147,7 @@ class MealRecommendationEngineTest {
 
         val top = result.recommendations.first()
         assertEquals(2, top.item.recipe.id)
-        assertTrue(top.reasons.any { it.contains("liked") })
+        assertTrue(top.reasons.any { it.contains("past picks") })
     }
 
     @Test
@@ -213,6 +262,8 @@ class MealRecommendationEngineTest {
         title: String,
         calories: Double = 600.0,
         protein: Double = 40.0,
+        fat: Double = 20.0,
+        carbohydrates: Double = 60.0,
         diets: List<String> = emptyList(),
         ingredients: List<String> = emptyList(),
         dishTypes: List<String> = listOf("main course")
@@ -228,7 +279,12 @@ class MealRecommendationEngineTest {
             Ingredient(index, name, 1.0, "g", null)
         },
         nutrition = Nutrition(
-            listOf(Nutrient("Calories", calories, "kcal"), Nutrient("Protein", protein, "g"))
+            listOf(
+                Nutrient("Calories", calories, "kcal"),
+                Nutrient("Protein", protein, "g"),
+                Nutrient("Fat", fat, "g"),
+                Nutrient("Carbohydrates", carbohydrates, "g")
+            )
         ),
         diets = diets,
         dishTypes = dishTypes

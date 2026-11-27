@@ -52,7 +52,10 @@ class MealRecommendationEngine(
         // Reason: grouping by dish type with no fallback put every recipe Spoonacular sent
         // without one into a single "" group, where a cap of one per group threw all but one of
         // them away. A recipe with no dish type is now its own group.
-        val picks = pickVaried(ranked, MAX_RESULTS, maxPerGroup = 1) {
+        // Reason: a cap of one per dish type meant only the first pick was chosen on score.
+        // Spoonacular labels most of a page the same way, so the other two slots fell to the
+        // variety fallback and came back near-arbitrary. Two scored picks, one for variety.
+        val picks = pickVaried(ranked, MAX_RESULTS, maxPerGroup = 2) {
             it.item.recipe.dishTypes.firstOrNull()?.lowercase()
                 ?.takeIf(String::isNotBlank)
                 ?: "untyped-${it.itemId}"
@@ -78,7 +81,8 @@ class MealRecommendationEngine(
             .distinct()
         val features = mapOf(
             CALORIE_FIT to calorieFit(pick.calories, targets.calories),
-            PROTEIN_FIT to (pick.proteinGrams / targets.proteinGrams).coerceAtMost(1.0),
+            PROTEIN_FIT to proteinFit(pick.proteinGrams, targets.proteinGrams),
+            MACRO_BALANCE to macroBalance(pick),
             NOVELTY to novelty(context, recipe, nowMillis),
             LEARNED_AFFINITY to preferences.affinityFor(tags)
         )
@@ -108,6 +112,42 @@ class MealRecommendationEngine(
     private fun calorieFit(calories: Int, target: Int): Double =
         (1.0 - abs(calories - target).toDouble() / target).coerceAtLeast(0.0)
 
+    /**
+     * Protein against the per-meal target.
+     *
+     * Reason: this used to be the ratio capped at 1, which scored a recipe carrying three
+     * times the target exactly as well as one that hit it. Protein above target is not a
+     * problem the way calories above target are, so there is a tolerance band rather than a
+     * symmetric penalty, but past it the credit does fall away.
+     */
+    private fun proteinFit(protein: Double, target: Double): Double {
+        if (target <= 0.0) return 0.0
+        val ratio = protein / target
+        return when {
+            ratio < 1.0 -> ratio
+            ratio <= OVER_PROTEIN_TOLERANCE -> 1.0
+            else -> (1.0 - (ratio - OVER_PROTEIN_TOLERANCE) / OVER_PROTEIN_TOLERANCE)
+                .coerceAtLeast(0.0)
+        }
+    }
+
+    /**
+     * How skewed the portion's macros are, by share of its energy.
+     *
+     * Reason: calories and protein alone rank a 700 kcal plate of mostly fat level with a
+     * balanced one. A recipe missing macro data scores neutral rather than zero, so a gap in
+     * Spoonacular's nutrition is not read as a bad meal.
+     */
+    private fun macroBalance(pick: MealPick): Double {
+        val energy = pick.proteinGrams * KCAL_PER_GRAM_PROTEIN +
+            pick.carbohydratesGrams * KCAL_PER_GRAM_CARB +
+            pick.fatGrams * KCAL_PER_GRAM_FAT
+        if (energy <= 0.0) return NEUTRAL_BALANCE
+        val fatShare = pick.fatGrams * KCAL_PER_GRAM_FAT / energy
+        val excess = (fatShare - FAT_SHARE_TARGET).coerceAtLeast(0.0)
+        return (1.0 - excess / (1.0 - FAT_SHARE_TARGET)).coerceIn(0.0, 1.0)
+    }
+
     private fun novelty(
         context: MealRecommendationContext,
         recipe: Recipe,
@@ -136,41 +176,50 @@ class MealRecommendationEngine(
         targets: MealTargets,
         hasHistory: Boolean
     ): List<String> = buildList {
-        if ((features[LEARNED_AFFINITY] ?: 0.0) >= 0.3) add("Similar to meals you've liked")
-        if (pick.servings != 1.0) {
-            add("Have ${formatServings(pick.servings)} servings to fit your meal target")
-        }
+        // Reason: these sit beside the portion and the calories the card already shows, so a
+        // reason that repeats either of those numbers buys the reader nothing. Each one says
+        // what the figures do not.
+        if ((features[LEARNED_AFFINITY] ?: 0.0) >= 0.3) add("Like your past picks")
         if ((features[CALORIE_FIT] ?: 0.0) >= 0.8) {
-            add("About ${pick.calories} kcal, close to your ${targets.calories} kcal meal target")
+            add("Near your ${targets.calories} kcal target")
         }
         if ((features[PROTEIN_FIT] ?: 0.0) >= 0.8) {
-            add(
-                "${pick.proteinGrams.toInt()} g protein toward your " +
-                    "${targets.dailyProteinGrams} g daily target"
-            )
+            add("Protein toward ${targets.dailyProteinGrams} g a day")
         }
-        if (hasHistory && features[NOVELTY] == 1.0) add("Something you haven't eaten recently")
+        if ((features[MACRO_BALANCE] ?: 0.0) >= 0.9 && pick.fatGrams > 0.0) {
+            add("Balanced macros")
+        }
+        if (hasHistory && features[NOVELTY] == 1.0) add("Not eaten recently")
     }.take(MAX_REASONS)
-
-    private fun formatServings(servings: Double): String =
-        if (servings % 1.0 == 0.0) servings.toInt().toString() else servings.toString()
 
     companion object {
         const val CALORIE_FIT = "calorieFit"
         const val PROTEIN_FIT = "proteinFit"
+        const val MACRO_BALANCE = "macroBalance"
         const val NOVELTY = "novelty"
         const val LEARNED_AFFINITY = "learnedAffinity"
 
         val DEFAULT_WEIGHTS = ScoringWeights(
             mapOf(
-                CALORIE_FIT to 0.35,
-                PROTEIN_FIT to 0.25,
-                NOVELTY to 0.15,
-                LEARNED_AFFINITY to 0.25
+                CALORIE_FIT to 0.30,
+                PROTEIN_FIT to 0.22,
+                MACRO_BALANCE to 0.13,
+                NOVELTY to 0.12,
+                LEARNED_AFFINITY to 0.23
             )
         )
 
         private const val MAX_RESULTS = 3
         private const val MAX_REASONS = 3
+
+        /** Protein up to this multiple of the target still scores full marks. */
+        private const val OVER_PROTEIN_TOLERANCE = 1.5
+
+        /** Fat may supply this share of a meal's energy before the score starts falling. */
+        private const val FAT_SHARE_TARGET = 0.40
+        private const val NEUTRAL_BALANCE = 0.5
+        private const val KCAL_PER_GRAM_PROTEIN = 4.0
+        private const val KCAL_PER_GRAM_CARB = 4.0
+        private const val KCAL_PER_GRAM_FAT = 9.0
     }
 }
