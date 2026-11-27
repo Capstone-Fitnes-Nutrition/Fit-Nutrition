@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import sheridan.dheripu.fitnutrition.AuthManager
 import sheridan.dheripu.fitnutrition.data.NutritionViewModel
 import sheridan.dheripu.fitnutrition.model.NutritionLog
 import sheridan.dheripu.fitnutrition.ui.components.InfoCard
@@ -57,7 +58,7 @@ private data class NutritionAnalyticsData(
 @Composable
 fun NutritionAnalyticsScreen(
     onBackClick: () -> Unit,
-    nutritionViewModel: NutritionViewModel = viewModel()
+    nutritionViewModel: NutritionViewModel = viewModel(key = "nutrition-${AuthManager.currentUser?.uid ?: "guest"}")
 ) {
     BackHandler { onBackClick() }
 
